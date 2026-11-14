@@ -17,6 +17,22 @@ create sequence if not exists invoice_number_seq start with 1001;
 create sequence if not exists quote_number_seq start with 1001;
 
 -- ---------------------------------------------------------------------------
+-- profiles table FIRST: is_admin()/is_active_user() below reference it, and
+-- Postgres validates those references at CREATE FUNCTION time, so the table
+-- must exist first. The full profiles definition is repeated below (idempotent).
+-- ---------------------------------------------------------------------------
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  name text not null,
+  email text not null,
+  role text not null check (role in ('sales', 'admin')),
+  active boolean not null default true,
+  mfa_enrolled boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- Helper functions (SECURITY DEFINER so RLS policies can call them without
 -- recursing into profiles RLS).
 -- ---------------------------------------------------------------------------
