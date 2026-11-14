@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
-import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors } from './lib/auth.js'
+import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import Login from './components/Login.jsx'
+import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
 import ImportCustomers from './components/ImportCustomers.jsx'
@@ -52,6 +52,15 @@ export default function App() {
   const [mfaFactorId, setMfaFactorId] = useState('')
   const [mfaCode, setMfaCode] = useState('')
   const [mfaMsg, setMfaMsg] = useState('')
+  // Invite / password-reset callback: user has a session from the link but
+  // no password yet — show Set-password instead of the Dashboard.
+  const [passwordSetup, setPasswordSetup] = useState(false)
+  // Settings > Change password
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState('')
+  const [pwError, setPwError] = useState('')
 
   const isAdmin = profile?.role === 'admin'
 
@@ -75,15 +84,31 @@ export default function App() {
       }
       const session = await getSession()
       if (session?.user) {
-        const p = await getProfile(session.user.id)
-        if (p && p.active) {
+        // Invite / reset link landed here: session exists, but the user
+        // has no password yet — show Set-password, not the Dashboard.
+        // (Supabase parses the #access_token=...&type=invite|recovery
+        // hash into the session on load; see lib/supabase.js.)
+        if (isInviteOrRecoveryCallback()) {
           setUser(session.user)
-          setProfile(p)
+          setPasswordSetup(true)
+        } else {
+          const p = await getProfile(session.user.id)
+          if (p && p.active) {
+            setUser(session.user)
+            setProfile(p)
+          }
         }
       }
       setAuthChecked(true)
     }
     init()
+    // A PASSWORD_RECOVERY event can also arrive after load (e.g. the
+    // reset link was opened in this tab) — route it to Set-password too.
+    if (!supabaseConfigured) return undefined
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordSetup(true)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -139,6 +164,16 @@ export default function App() {
   }
 
   if (!authChecked) return <div className="container"><p>Loading…</p></div>
+  // Invite / reset callback: session exists, password not set yet.
+  if (passwordSetup && user) {
+    return (
+      <SetPassword
+        user={user}
+        onDone={(u, p) => { setPasswordSetup(false); clearAuthHash(); onAuthed(u, p) }}
+        onSignOut={async () => { setPasswordSetup(false); clearAuthHash(); await doSignOut() }}
+      />
+    )
+  }
   if (!profile) {
     return (
       <div>
@@ -478,6 +513,51 @@ export default function App() {
             <p className="small muted">
               MFA status is also visible via Supabase Auth. <button className="btn secondary" disabled={!supabaseConfigured} onClick={async () => { const d = await listMfaFactors(); setMfaMsg(`Enrolled factors: ${d?.totp?.length || 0}`) }}>Check enrolled factors</button>
             </p>
+            <h3>Change password</h3>
+            <p className="muted small">Signed in as {user?.email}. At least 8 characters.</p>
+            {pwMsg && <div className="success">{pwMsg}</div>}
+            {pwError && <div className="error">{pwError}</div>}
+            <div className="row">
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder="New password"
+                value={pwNew}
+                onChange={(e) => setPwNew(e.target.value)}
+                style={{ maxWidth: 220 }}
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder="Confirm new password"
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+                style={{ maxWidth: 220 }}
+              />
+              <button
+                className="btn"
+                disabled={pwBusy || !supabaseConfigured}
+                onClick={async () => {
+                  setPwMsg('')
+                  setPwError('')
+                  if (pwNew.length < 8) { setPwError('Password must be at least 8 characters.'); return }
+                  if (pwNew !== pwConfirm) { setPwError('Passwords do not match.'); return }
+                  setPwBusy(true)
+                  try {
+                    await updatePassword(pwNew)
+                    setPwMsg('Password changed.')
+                    setPwNew('')
+                    setPwConfirm('')
+                  } catch (err) {
+                    setPwError(err.message || 'Could not change password.')
+                  } finally {
+                    setPwBusy(false)
+                  }
+                }}
+              >
+                {pwBusy ? 'Saving…' : 'Change password'}
+              </button>
+            </div>
           </div>
         )}
       </div>

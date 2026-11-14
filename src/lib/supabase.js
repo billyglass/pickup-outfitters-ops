@@ -8,6 +8,9 @@ export const supabaseConfigured = Boolean(url && anonKey)
 
 export const supabase = supabaseConfigured
   ? createClient(url, anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true },
+      // detectSessionInUrl: parse the #access_token=...&type=invite /
+      // type=recovery hash from Supabase invite / reset links into a
+      // session. Without this, an invited user lands with no session.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     })
   : null

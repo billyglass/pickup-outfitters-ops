@@ -45,6 +45,28 @@ Supabase project for this app (separate from the tracker database).
 
 ### 2. Create Bill's login (Admin, sole first user)
 
+**Before sending any invite — set the Site URL (required).**
+If this is skipped, Supabase invite / reset links redirect to
+`http://localhost:3000` and the link fails on a phone with
+"couldn't connect to the server". Do this first:
+
+1. Supabase Dashboard → **Authentication** → **URL Configuration**.
+2. **Site URL:** `https://pickup-outfitters-ops.vercel.app/`
+3. **Redirect URLs:** add `https://pickup-outfitters-ops.vercel.app/**`
+4. Save. Then send the invite below — and if an earlier invite was
+   already sent with the wrong redirect, send a fresh one after this
+   is set (the old link will still point at localhost).
+
+**Set-password flow (in the app, no password is invented):**
+An invited user clicks the invite link, lands on the live app, and
+sees a **"Set your password"** screen (new password + confirm,
+minimum 8 characters). On success they go straight to the Dashboard.
+If the link expired, they use **"Forgot password?"** on the sign-in
+screen, which emails a fresh link back to the live app. A signed-in
+user can also change their password in **Settings → Change password**.
+
+Then create the user:
+
 1. Supabase Dashboard → **Authentication** → **Users** → **Add user**.
 2. Email: `bglass@pickupoutfitters.com` (Bill's address — confirm this is
    the right one before creating it; the app does not invent a password).
