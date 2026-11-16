@@ -116,9 +116,28 @@ async function sbSaveCustomer(customer, contacts, addresses) {
 async function sbReplaceChildren(table, fk, customerId, rows) {
   const { error: delErr } = await supabase.from(table).delete().eq(fk, customerId)
   if (delErr) throw delErr
-  const clean = (rows || []).filter((r) => Object.values(r).some((v) => String(v ?? '').trim() !== ''))
+  // Build an explicit payload with ONLY the allowed columns — never id,
+  // version, or timestamps. The old code spread the whole row ({...r, id:
+  // undefined}), and Supabase/PostgREST sent id as null, which violates the
+  // not-null PK: "null value in column id of relation contacts".
+  // Also: a blank row must not count as content just because is_primary=false.
+  const allowed =
+    table === 'contacts'
+      ? ['name', 'phone', 'email', 'title', 'is_primary']
+      : ['address_type', 'line1', 'line2', 'city', 'state', 'zip', 'is_primary']
+  const clean = (rows || [])
+    .map((r) => {
+      const o = {}
+      for (const k of allowed) o[k] = k === 'is_primary' ? !!r[k] : r[k] || null
+      return o
+    })
+    .filter((o) =>
+      allowed
+        .filter((k) => k !== 'is_primary')
+        .some((k) => String(o[k] ?? '').trim() !== '')
+    )
   if (!clean.length) return
-  const payload = clean.map((r) => ({ ...r, [fk]: customerId, id: undefined }))
+  const payload = clean.map((o) => ({ ...o, [fk]: customerId }))
   const { error } = await supabase.from(table).insert(payload)
   if (error) throw error
 }
