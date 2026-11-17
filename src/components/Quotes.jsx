@@ -1,0 +1,171 @@
+import { useMemo, useState } from 'react'
+import { store } from '../lib/store.js'
+import { ageDays } from '../lib/tickets.js'
+import TicketForm from './TicketForm.jsx'
+import TicketPrint from './TicketPrint.jsx'
+
+const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
+
+export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError }) {
+  const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
+  const [printing, setPrinting] = useState(null)
+  const [fCustomer, setFCustomer] = useState('')
+  const [fSales, setFSales] = useState('')
+  const [fStatus, setFStatus] = useState('')
+  const [fAge, setFAge] = useState('')
+  const [outstandingOnly, setOutstandingOnly] = useState(true)
+  const [busy, setBusy] = useState('')
+  const [convertMsg, setConvertMsg] = useState('')
+
+  const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
+  const customerOf = (id) => data.customers.find((c) => c.id === id)?.company || '—'
+  const linesOf = (id) => (data.quoteLines || []).filter((l) => l.quote_id === id)
+
+  const filtered = useMemo(() => {
+    return data.quotes.filter((q) => {
+      if (outstandingOnly && !['Draft', 'Sent', 'Accepted'].includes(q.status)) return false
+      if (fCustomer && q.customer_id !== fCustomer) return false
+      if (fSales && q.salesperson_id !== fSales) return false
+      if (fStatus && q.status !== fStatus) return false
+      if (fAge) {
+        const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10)) ?? 0
+        if (fAge === '<7' && age >= 7) return false
+        if (fAge === '7-30' && (age < 7 || age > 30)) return false
+        if (fAge === '31-60' && (age < 31 || age > 60)) return false
+        if (fAge === '60+' && age < 60) return false
+      }
+      return true
+    })
+  }, [data.quotes, outstandingOnly, fCustomer, fSales, fStatus, fAge])
+
+  const outstanding = data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status))
+  const outstandingValue = outstanding.reduce((s, q) => s + Number(q.total || 0), 0)
+
+  async function setStatus(q, status) {
+    setBusy(q.id)
+    try {
+      await store.setTicketStatus('quote', q, status, user?.id)
+      await onReload()
+    } catch (err) { onError(err.message || 'Status change failed.') } finally { setBusy('') }
+  }
+
+  async function convert(q) {
+    if (q.converted_invoice_id) {
+      setConvertMsg(`This quote was already converted — see the invoice linked on the quote.`)
+      return
+    }
+    if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number will be assigned. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.`)) return
+    setBusy(`convert-${q.id}`)
+    setConvertMsg('')
+    try {
+      const invoice = await store.convertQuoteToInvoice(q, linesOf(q.id), user?.id, data)
+      setConvertMsg(`Converted to invoice ${invoice.number}. Open Invoices to view / print it.`)
+      await onReload()
+    } catch (err) { onError(err.message || 'Conversion failed.') } finally { setBusy('') }
+  }
+
+  async function handleDelete(q) {
+    if (!isAdmin) return
+    if (!window.confirm(`Delete quote ${q.number}? Drafts only — this cannot be undone.`)) return
+    try { await store.deleteTicket('quote', q.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
+  }
+
+  if (printing) {
+    const q = printing
+    return (
+      <TicketPrint
+        kind="quote" ticket={q} lines={linesOf(q.id)}
+        customer={data.customers.find((c) => c.id === q.customer_id)}
+        vehicle={data.vehicles.find((v) => v.id === q.vehicle_id)}
+        salespersonName={nameOf(q.salesperson_id)} settings={settings}
+        onClose={() => setPrinting(null)}
+      />
+    )
+  }
+  if (editing !== undefined) {
+    return (
+      <TicketForm
+        kind="quote"
+        initial={editing}
+        lines={editing ? linesOf(editing.id) : undefined}
+        customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
+        products={data.products || []} profiles={data.profiles || []}
+        user={user} profile={profile} isAdmin={isAdmin} settings={settings}
+        onSaved={async () => { setEditing(undefined); await onReload() }}
+        onCancel={() => setEditing(undefined)}
+        onPrint={editing ? () => setPrinting(editing) : undefined}
+      />
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="row-between">
+        <h2 style={{ margin: 0 }}>Quotes — Outstanding ({outstanding.length}) · ${outstandingValue.toFixed(2)}</h2>
+        <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
+      </div>
+      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Converting an Accepted quote creates the invoice — no retyping, and it can only be converted once.</p>
+      {convertMsg && <div className="success">{convertMsg}</div>}
+      <div className="row" style={{ marginTop: 12 }}>
+        <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={outstandingOnly} onChange={(e) => setOutstandingOnly(e.target.checked)} /> Outstanding only</label>
+        <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
+          <option value="">All customers</option>
+          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+        </select>
+        <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
+          <option value="">All salespeople</option>
+          {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <select value={fAge} onChange={(e) => setFAge(e.target.value)}>
+          <option value="">Any age</option>
+          <option value="<7">&lt; 7 days</option>
+          <option value="7-30">7–30 days</option>
+          <option value="31-60">31–60 days</option>
+          <option value="60+">60+ days</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>Quote</th><th>Customer</th><th>Vehicle / VIN</th><th>Date</th><th>Age</th><th>Expires</th><th>Salesperson</th><th>Status</th><th>Total</th><th></th></tr></thead>
+        <tbody>
+          {filtered.map((q) => {
+            const v = data.vehicles.find((x) => x.id === q.vehicle_id)
+            const vin = q.vehicle_snapshot?.vin || v?.vin || '—'
+            const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10))
+            return (
+              <tr key={q.id}>
+                <td><strong>{q.number}</strong>{q.converted_invoice_id ? <div className="muted small">→ converted</div> : ''}</td>
+                <td>{customerOf(q.customer_id)}</td>
+                <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
+                <td>{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
+                <td>{age ?? '—'}d</td>
+                <td>{q.expires_on || '—'}</td>
+                <td>{nameOf(q.salesperson_id)}</td>
+                <td>{q.status}</td>
+                <td>${Number(q.total || 0).toFixed(2)}</td>
+                <td>
+                  <div className="row">
+                    <button className="btn secondary" onClick={() => setEditing(q)}>Open</button>
+                    <button className="btn secondary" onClick={() => setPrinting(q)}>Print</button>
+                    {q.status === 'Draft' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Sent')}>Send</button>}
+                    {q.status === 'Sent' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Accepted')}>Accept</button>}
+                    {['Draft', 'Sent'].includes(q.status) && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Declined')}>Decline</button>}
+                    {q.status === 'Accepted' && !q.converted_invoice_id && (
+                      <button className="btn" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
+                    )}
+                    {q.status === 'Accepted' && q.converted_invoice_id && <span className="muted small">Converted</span>}
+                    {isAdmin && q.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(q)}>Delete</button>}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {filtered.length === 0 && <p className="muted">No quotes match these filters.</p>}
+    </div>
+  )
+}

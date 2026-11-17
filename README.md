@@ -4,11 +4,23 @@ Cloud-based, multi-user business management for Pickup Outfitters
 (St. Ann, Missouri): customers, vehicles, quotes, invoices, receivables,
 payables, and reporting. Built to tie into the Installer Job Tracker later.
 
-**Phase 1 (this build):** user accounts + permissions, customers, vehicles,
+**Phase 1:** user accounts + permissions, customers, vehicles,
 global search, QuickBooks customer CSV import (Admin only).
-Quotes / invoices are Phase 2, payments / receivables / payables Phase 3,
-reporting Phase 4, installer integration Phase 5, templates / printing Phase 6.
-Those screens exist as clearly-marked placeholders with no fake data.
+**Phase 2 (this build):** quotes, invoices, atomic numbering, deep global
+search (inside tickets, lines, and VIN snapshots), quote → invoice
+conversion, Admin product catalog, and a print view matching Bill's
+Excel template (2848 N. Lindbergh Blvd, St. Ann MO 63074, 314-428-3730;
+tax 7.74% on taxable lines only; labor shown separately, included in the
+subtotal, not added twice). Payments / receivables / payables are Phase 3,
+reporting Phase 4, installer integration Phase 5, templates / printing
+calibration Phase 6. Those screens exist as clearly-marked placeholders
+with no fake data.
+
+**Phase 2 migration (run once in Supabase SQL Editor):**
+`supabase/migrations/002_draft_line_deletes.sql` — lets any active user
+delete a line on a Draft quote/invoice (Phase 1 RLS only let Admins
+delete lines, so Sales editing a Draft would have failed). No schema
+rewrite; the Phase 1 schema already had the quote/invoice tables.
 
 Stack: Vite + React 18 + Supabase (Postgres + Auth), same as the Installer
 Job Tracker. No extra paid services.

@@ -6,13 +6,17 @@ import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
 import ImportCustomers from './components/ImportCustomers.jsx'
+import Quotes from './components/Quotes.jsx'
+import Invoices from './components/Invoices.jsx'
+import Products from './components/Products.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'customers', label: 'Customers' },
   { id: 'vehicles', label: 'Vehicles' },
-  { id: 'quotes', label: 'Quotes', phase: 'Phase 2' },
-  { id: 'invoices', label: 'Invoices', phase: 'Phase 2' },
+  { id: 'quotes', label: 'Quotes' },
+  { id: 'invoices', label: 'Invoices' },
+  { id: 'products', label: 'Products', admin: true },
   { id: 'ar', label: 'Receivables', phase: 'Phase 3', admin: true },
   { id: 'ap', label: 'Payables', phase: 'Phase 3', admin: true },
   { id: 'reports', label: 'Reports', phase: 'Phase 4', admin: true },
@@ -36,7 +40,7 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [tab, setTab] = useState('dashboard')
-  const [data, setData] = useState({ customers: [], contacts: [], addresses: [], vehicles: [], quotes: [], invoices: [], settings: null })
+  const [data, setData] = useState({ customers: [], contacts: [], addresses: [], vehicles: [], quotes: [], invoices: [], quoteLines: [], invoiceLines: [], products: [], profiles: [], settings: null })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
@@ -48,6 +52,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
+  const [searchFilters, setSearchFilters] = useState({ type: '', status: '', customerId: '', salespersonId: '', from: '', to: '' })
   const [mfaQr, setMfaQr] = useState('')
   const [mfaFactorId, setMfaFactorId] = useState('')
   const [mfaCode, setMfaCode] = useState('')
@@ -133,7 +138,7 @@ export default function App() {
     setSearching(true)
     setError('')
     try {
-      setSearchResults(await globalSearch(searchQuery, data))
+      setSearchResults(await globalSearch(searchQuery, data, searchFilters))
       setTab('search')
     } catch (err) {
       setError(err.message || 'Search failed.')
@@ -248,16 +253,16 @@ export default function App() {
         {tab === 'dashboard' && (
           <>
             <h1>Dashboard</h1>
-            <p className="muted">Phase 1 — customers and vehicles. Quotes, invoices, receivables, payables, and reports arrive in Phases 2–4.</p>
+            <p className="muted">Quotes and invoices are live. Receivables, payables, and reports arrive in Phases 3–4.</p>
             <div className="grid">
               <div className="tile"><div className="num">{data.customers.length}</div><div className="label">Customers</div></div>
               <div className="tile"><div className="num">{data.vehicles.length}</div><div className="label">Vehicles</div></div>
-              <div className="tile"><div className="num">{data.quotes.length}</div><div className="label">Quotes (Phase 2)</div></div>
-              <div className="tile"><div className="num">{data.invoices.length}</div><div className="label">Invoices (Phase 2)</div></div>
+              <div className="tile"><div className="num">{data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status)).length}</div><div className="label">Outstanding quotes</div></div>
+              <div className="tile"><div className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).length}</div><div className="label">Open invoices</div></div>
               {isAdmin && (
                 <>
-                  <div className="tile"><div className="num">—</div><div className="label">Receivables — Phase 3 (Admin)</div></div>
-                  <div className="tile"><div className="num">—</div><div className="label">Payables — Phase 3 (Admin)</div></div>
+                  <div className="tile"><div className="num">${data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status)).reduce((s, q) => s + Number(q.total || 0), 0).toFixed(2)}</div><div className="label">Outstanding quote value</div></div>
+                  <div className="tile"><div className="num">${data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0).toFixed(2)}</div><div className="label">Open invoice balance</div></div>
                 </>
               )}
             </div>
@@ -275,6 +280,37 @@ export default function App() {
         {tab === 'search' && searchResults && (
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Search results for “{searchQuery}”</h2>
+            <p className="muted small">Searches inside quotes and invoices too — VIN (full / last 6 / last 8), part numbers, line-item descriptions, numbers, and PO numbers.</p>
+            <div className="row" style={{ marginBottom: 12 }}>
+              <select value={searchFilters.type} onChange={(e) => setSearchFilters({ ...searchFilters, type: e.target.value })}>
+                <option value="">Quotes + invoices</option>
+                <option value="quote">Quotes only</option>
+                <option value="invoice">Invoices only</option>
+              </select>
+              <select value={searchFilters.status} onChange={(e) => setSearchFilters({ ...searchFilters, status: e.target.value })}>
+                <option value="">Any status</option>
+                {['Draft', 'Sent', 'Accepted', 'Declined', 'Expired', 'Issued', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
+              </select>
+              <select value={searchFilters.customerId} onChange={(e) => setSearchFilters({ ...searchFilters, customerId: e.target.value })}>
+                <option value="">Any customer</option>
+                {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+              </select>
+              <select value={searchFilters.salespersonId} onChange={(e) => setSearchFilters({ ...searchFilters, salespersonId: e.target.value })}>
+                <option value="">Any salesperson</option>
+                {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input type="date" value={searchFilters.from} onChange={(e) => setSearchFilters({ ...searchFilters, from: e.target.value })} aria-label="From date" />
+              <input type="date" value={searchFilters.to} onChange={(e) => setSearchFilters({ ...searchFilters, to: e.target.value })} aria-label="To date" />
+              <button className="btn secondary" onClick={runSearch}>Apply filters</button>
+            </div>
+            <h3>Tickets ({(searchResults.tickets || []).length})</h3>
+            {(searchResults.tickets || []).length === 0 && <p className="muted">No quotes or invoices matched.</p>}
+            {(searchResults.tickets || []).map((r) => (
+              <div key={`${r.type}-${r.ticket.id}`} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10)} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
+                <div className="muted small">Matched: {r.match}</div>
+              </div>
+            ))}
             <h3>Customers ({searchResults.customers.length})</h3>
             {searchResults.customers.length === 0 && <p className="muted">No customers matched.</p>}
             {searchResults.customers.map((c) => (
@@ -290,16 +326,6 @@ export default function App() {
                 <strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · Plate {v.plate || '—'} · {customerName(v.customer_id)}
               </div>
             ))}
-            <h3>Quotes ({searchResults.quotes.length}) · Invoices ({searchResults.invoices.length})</h3>
-            {searchResults.quotes.map((q) => (
-              <div key={q.id}>{q.number} · {q.status} · {customerName(q.customer_id)}</div>
-            ))}
-            {searchResults.invoices.map((inv) => (
-              <div key={inv.id}>{inv.number} · {inv.status} · {customerName(inv.customer_id)}</div>
-            ))}
-            {(searchResults.quotes.length === 0 && searchResults.invoices.length === 0) && (
-              <p className="muted">No quotes or invoices matched yet — those tables are Phase 2 scaffolding and are empty in Phase 1.</p>
-            )}
           </div>
         )}
 
@@ -419,16 +445,13 @@ export default function App() {
         )}
 
         {tab === 'quotes' && (
-          <Placeholder title="Quotes" phase="Phase 2">
-            Draft / Sent / Accepted / Declined / Expired, with line items, an outstanding-quotes screen,
-            expiration and follow-up dates, and conversion to invoice without retyping.
-          </Placeholder>
+          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} />
         )}
         {tab === 'invoices' && (
-          <Placeholder title="Invoices" phase="Phase 2">
-            Atomic numbering from INV-1001, quote conversion, snapshots so later edits never rewrite
-            an issued invoice, and version-conflict protection.
-          </Placeholder>
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} />
+        )}
+        {tab === 'products' && isAdmin && (
+          <Products data={data} isAdmin={isAdmin} onReload={loadData} onError={setError} />
         )}
         {tab === 'ar' && isAdmin && (
           <Placeholder title="Accounts receivable" phase="Phase 3">
@@ -467,7 +490,7 @@ export default function App() {
               Numbering prefixes and next numbers live in the <code>settings</code> table and the
               Postgres sequences — change them with the SQL functions in <code>supabase/schema.sql</code>{' '}
               (<code>admin_set_next_invoice_number</code> / <code>admin_set_next_quote_number</code>).
-              A settings editor UI is Phase 2.
+              A settings editor UI is not built yet — numbering is managed with those SQL functions.
             </p>
             <h3>Admin MFA (TOTP)</h3>
             {mfaMsg && <div className="success">{mfaMsg}</div>}
