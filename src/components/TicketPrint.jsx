@@ -6,7 +6,7 @@ import { money, computeTotals } from '../lib/tickets.js'
 // Date + valid until (quote) / due date (invoice)
 // SALESPERSON / P.O. NUMBER / VEHICLE / TERMS
 // Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / TAXABLE / AMOUNT
-// NOTES — SUBTOTAL / TAX RATE / TAX / LABOR / TOTAL — "Thank You For Your Business"
+// NOTES — SUBTOTAL / TAX (7.74%) / LABOR / TOTAL — "Thank You For Your Business"
 // Plain black-and-white, no background colours. VIN and Year/Make/Model
 // print on the SAME line, matching the ticket's Vehicle section.
 export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose }) {
@@ -18,13 +18,11 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   const vin = snapVehicle.vin || vehicle?.vin || ''
   const ymm = [snapVehicle.year ?? vehicle?.year, snapVehicle.make || vehicle?.make, snapVehicle.model || vehicle?.model].filter(Boolean).join(' ')
   const unit = snapVehicle.fleet_unit || vehicle?.fleet_unit || ''
-  const plate = snapVehicle.plate || vehicle?.plate || ''
   // VIN and Year/Make/Model on the SAME line, as on the ticket.
   const vehicleLine = [
     vin ? `VIN: ${vin}` : '',
     ymm || '',
     unit ? `Unit ${unit}` : '',
-    plate ? `Plate ${plate}` : '',
   ].filter(Boolean).join(' · ')
   const vehicleText = ymm || '—'
   const contactName = snapCustomer.contact_name || ''
@@ -112,8 +110,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
           <table className="print-totals">
             <tbody>
               <tr><td>Subtotal</td><td>${money(totals.subtotal)}</td></tr>
-              <tr><td>Tax rate</td><td>{(taxRate * 100).toFixed(2)}%</td></tr>
-              <tr><td>Tax</td><td>${money(totals.taxTotal)}</td></tr>
+              <tr><td>Tax ({(taxRate * 100).toFixed(2)}%)</td><td>${money(totals.taxTotal)}</td></tr>
               <tr><td>Labor</td><td>${money(totals.labor)}</td></tr>
               <tr><td><strong>Total</strong></td><td><strong>${money(totals.total)}</strong></td></tr>
               {!isQuote && <tr><td>Balance due</td><td>${money(ticket.balance_due ?? totals.total)}</td></tr>}

@@ -203,7 +203,7 @@ export default function App() {
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
     if (!q) return true
-    return [v.vin_normalized, v.vin, v.fleet_unit, v.plate, v.make, v.model]
+    return [v.vin_normalized, v.vin, v.fleet_unit, v.make, v.model]
       .some((f) => String(f || '').toLowerCase().includes(q))
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
@@ -332,7 +332,7 @@ export default function App() {
             {searchResults.vehicles.length === 0 && <p className="muted">No vehicles matched. Try the full VIN, or just the last 6 or 8 characters.</p>}
             {searchResults.vehicles.map((v) => (
               <div key={v.id} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · Plate {v.plate || '—'} · {customerName(v.customer_id)}
+                <strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · {customerName(v.customer_id)}
               </div>
             ))}
           </div>
@@ -374,7 +374,7 @@ export default function App() {
                 <h3>Vehicles ({data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).length})</h3>
                 {data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).map((v) => (
                   <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                    <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · Plate {v.plate || '—'}</span>
+                    <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}</span>
                     <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
                   </div>
                 ))}
@@ -446,16 +446,15 @@ export default function App() {
                   <h2 style={{ margin: 0 }}>Vehicles ({vehicles.length})</h2>
                 </div>
                 <p className="muted">Vehicles are created automatically from quotes and invoices — enter the VIN and Year/Make/Model on the ticket and it shows up here. Use Edit below to correct a typo on a vehicle record.</p>
-                <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Filter by VIN, fleet/unit, plate, make…" style={{ marginTop: 12 }} />
+                <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Filter by VIN, fleet/unit, make…" style={{ marginTop: 12 }} />
                 <table>
-                  <thead><tr><th>Vehicle</th><th>VIN</th><th>Fleet / unit</th><th>Plate</th><th>Customer</th><th></th></tr></thead>
+                  <thead><tr><th>Vehicle</th><th>VIN</th><th>Fleet / unit</th><th>Customer</th><th></th></tr></thead>
                   <tbody>
                     {vehicles.map((v) => (
                       <tr key={v.id}>
                         <td>{v.year || ''} {v.make || ''} {v.model || ''}</td>
                         <td>{v.vin || '—'}</td>
                         <td>{v.fleet_unit || '—'}</td>
-                        <td>{v.plate || '—'}</td>
                         <td>{customerName(v.customer_id)}</td>
                         <td>
                           <button className="btn secondary" onClick={() => setEditingVehicle(v)}>Edit</button>{' '}

@@ -177,7 +177,6 @@ async function sbSaveVehicle(vehicle) {
         make: vehicle.make || null,
         model: vehicle.model || null,
         fleet_unit: vehicle.fleet_unit || null,
-        plate: vehicle.plate || null,
         notes: vehicle.notes || null,
       })
       .eq('id', vehicle.id)
@@ -197,7 +196,6 @@ async function sbSaveVehicle(vehicle) {
       make: vehicle.make || null,
       model: vehicle.model || null,
       fleet_unit: vehicle.fleet_unit || null,
-      plate: vehicle.plate || null,
       notes: vehicle.notes || null,
     })
     .select()
@@ -211,7 +209,7 @@ async function sbCheckVin(vin, excludeId) {
   if (!normalized) return []
   const { data, error } = await supabase
     .from('vehicles')
-    .select('id, vin, vin_normalized, customer_id, year, make, model, fleet_unit, plate')
+    .select('id, vin, vin_normalized, customer_id, year, make, model, fleet_unit')
     .eq('vin_normalized', normalized)
   if (error) throw error
   return (data || []).filter((v) => v.id !== excludeId)
@@ -314,7 +312,6 @@ async function sbUpsertVehicleFromTicket(customerId, snapshot) {
     make: snapshot.make || '',
     model: snapshot.model || '',
     fleet_unit: snapshot.fleet_unit || '',
-    plate: snapshot.plate || '',
   }
   const decision = resolveVehicleUpsert(rows || [], customerId, fields)
   if (decision.action === 'none' || decision.action === 'link') return decision.vehicle
@@ -348,7 +345,6 @@ function localUpsertVehicleFromTicket(customerId, snapshot) {
     make: snapshot.make || '',
     model: snapshot.model || '',
     fleet_unit: snapshot.fleet_unit || '',
-    plate: snapshot.plate || '',
   }
   const decision = resolveVehicleUpsert(vehicles, customerId, fields)
   if (decision.action === 'none' || decision.action === 'link') return decision.vehicle
@@ -383,7 +379,6 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
         make: ticket.vehicle_snapshot?.make || '',
         model: ticket.vehicle_snapshot?.model || '',
         fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
-        plate: ticket.vehicle_snapshot?.plate || '',
       },
       header.vehicle_id
     ) || header.vehicle_snapshot
@@ -502,7 +497,6 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
           make: quote.vehicle_snapshot?.make || '',
           model: quote.vehicle_snapshot?.model || '',
           fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
-          plate: quote.vehicle_snapshot?.plate || '',
         },
         convertedVehicle.id
       ) || quote.vehicle_snapshot
@@ -743,8 +737,7 @@ function localSaveTicket(kind, ticket, lines, userId) {
             make: ticket.vehicle_snapshot?.make || '',
             model: ticket.vehicle_snapshot?.model || '',
             fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
-            plate: ticket.vehicle_snapshot?.plate || '',
-          },
+              },
           localVehicle.id
         ) || ticket.vehicle_snapshot
       : ticket.vehicle_snapshot,
@@ -819,8 +812,7 @@ export async function globalSearch(query, state, filters = {}) {
     )
     const vehicles = state.vehicles.filter((v) =>
       vinMatches(v.vin) ||
-      String(v.fleet_unit || '').toLowerCase().includes(lower) ||
-      String(v.plate || '').toLowerCase().includes(lower)
+      String(v.fleet_unit || '').toLowerCase().includes(lower)
     )
     const tickets = []
     const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
@@ -847,7 +839,7 @@ export async function globalSearch(query, state, filters = {}) {
   const [customers, contacts, vehicles, quotes, invoices, qLines, iLines] = await Promise.all([
     customersQuery.limit(20),
     supabase.from('contacts').select('*').or(`name.ilike.${like},email.ilike.${like},phone.ilike.${like}`).limit(20),
-    supabase.from('vehicles').select('*').or(`vin_normalized.ilike.${like},fleet_unit.ilike.${like},plate.ilike.${like}`).limit(20),
+    supabase.from('vehicles').select('*').or(`vin_normalized.ilike.${like},fleet_unit.ilike.${like}`).limit(20),
     supabase.from('quotes').select('*').or(`number.ilike.${like},po_number.ilike.${like}`).limit(20),
     supabase.from('invoices').select('*').or(`number.ilike.${like},po_number.ilike.${like}`).limit(20),
     supabase.from('quote_lines').select('*').or(`description.ilike.${like},part_number.ilike.${like}`).limit(20),
@@ -1051,8 +1043,7 @@ export const store = {
               make: quote.vehicle_snapshot?.make || '',
               model: quote.vehicle_snapshot?.model || '',
               fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
-              plate: quote.vehicle_snapshot?.plate || '',
-            },
+                },
             localVehicle.id
           ) || quote.vehicle_snapshot
         : quote.vehicle_snapshot

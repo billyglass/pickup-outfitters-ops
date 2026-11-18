@@ -4,7 +4,7 @@ import { normalizeVin } from '../lib/csv.js'
 
 export default function VehicleForm({ initial, customers, preselectedCustomerId, onSaved, onCancel }) {
   const [vehicle, setVehicle] = useState(
-    initial || { customer_id: preselectedCustomerId || '', vin: '', year: '', make: '', model: '', fleet_unit: '', plate: '', notes: '' }
+    initial || { customer_id: preselectedCustomerId || '', vin: '', year: '', make: '', model: '', fleet_unit: '', notes: '' }
   )
   const [vinMatches, setVinMatches] = useState([])
   const [status, setStatus] = useState('saved')
@@ -101,10 +101,6 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
           <label htmlFor="vf-fleet">Fleet / unit number</label>
           <input id="vf-fleet" value={vehicle.fleet_unit || ''} onChange={(e) => markDirty({ fleet_unit: e.target.value })} />
         </div>
-        <div>
-          <label htmlFor="vf-plate">License plate</label>
-          <input id="vf-plate" value={vehicle.plate || ''} onChange={(e) => markDirty({ plate: e.target.value })} />
-        </div>
       </div>
       {vinMatches.length > 0 && (
         <div className="warn">
@@ -112,7 +108,7 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
           {vinMatches.length} other vehicle record{vinMatches.length > 1 ? 's' : ''}:
           {vinMatches.map((m) => (
             <div key={m.id} className="small">
-              {m.year || ''} {m.make || ''} {m.model || ''} — unit {m.fleet_unit || '—'}, plate {m.plate || '—'}
+              {m.year || ''} {m.make || ''} {m.model || ''} — unit {m.fleet_unit || '—'}
             </div>
           ))}
           You can still save — this is a warning, not a block. Check it is not a

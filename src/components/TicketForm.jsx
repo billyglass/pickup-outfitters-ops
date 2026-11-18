@@ -44,7 +44,7 @@ export default function TicketForm({
     (initialLines?.length ? initialLines : [emptyLine()]).map((l) => ({ ...l }))
   )
   // Vehicle is entered ON the ticket — VIN + Year/Make/Model on one line,
-  // Fleet/Unit + Plate on the next. No separate vehicle step: on save the
+  // Fleet/Unit on the next. No separate vehicle step: on save the
   // ticket's VIN/YMM upserts the Vehicles directory (see store.saveTicket).
   // Initial fields come from the ticket snapshot first, then the linked
   // vehicle record (older tickets whose snapshot lacks YMM).
@@ -88,7 +88,7 @@ export default function TicketForm({
   const customer = customers.find((c) => c.id === ticket.customer_id) || null
   const vinNorm = normalizeVin(veh.vin)
   // A VIN already on file (prefer this customer's record) auto-fills the
-  // YMM/unit/plate fields — blank ones only, never overwriting what was typed.
+  // YMM/unit fields — blank ones only, never overwriting what was typed.
   // Walk-ins have no customer, so any record for the VIN is the fallback.
   const vinMatch = useMemo(
     () => findVehicleByVin(vehicles, veh.vin, walkIn ? null : ticket.customer_id),
@@ -105,7 +105,6 @@ export default function TicketForm({
       make: v.make || vinMatch.make || '',
       model: v.model || vinMatch.model || '',
       fleet_unit: v.fleet_unit || vinMatch.fleet_unit || '',
-      plate: v.plate || vinMatch.plate || '',
     }))
     setTicket((t) => (t.vehicle_id === vinMatch.id ? t : { ...t, vehicle_id: vinMatch.id }))
     setStatus('unsaved')
@@ -324,15 +323,9 @@ export default function TicketForm({
           <input value={veh.model || ''} disabled={readOnly} placeholder="F-250" onChange={(e) => { setVeh((v) => ({ ...v, model: e.target.value })); setStatus('unsaved') }} />
         </div>
       </div>
-      <div className="vehicle-row vehicle-row-2">
-        <div>
-          <label>Fleet / unit number (optional)</label>
-          <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
-        </div>
-        <div>
-          <label>License plate (optional)</label>
-          <input value={veh.plate || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, plate: e.target.value })); setStatus('unsaved') }} />
-        </div>
+      <div>
+        <label>Fleet / unit number (optional)</label>
+        <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
       </div>
       {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
       {vinMatchOtherCustomer && <div className="warn">This VIN is already on file under a different customer ({vinMatch.year || ''} {vinMatch.make || ''} {vinMatch.model || ''}). You can still save — check it's not a typo or the wrong customer.</div>}
@@ -441,8 +434,7 @@ export default function TicketForm({
       <table>
         <tbody>
           <tr><td>Subtotal</td><td style={{ textAlign: 'right' }}>${money(totals.subtotal)}</td></tr>
-          <tr><td>Tax rate</td><td style={{ textAlign: 'right' }}>{(taxRate * 100).toFixed(2)}%</td></tr>
-          <tr><td>Tax (taxable lines only)</td><td style={{ textAlign: 'right' }}>${money(totals.taxTotal)}</td></tr>
+          <tr><td>Tax ({(taxRate * 100).toFixed(2)}%) — taxable lines only</td><td style={{ textAlign: 'right' }}>${money(totals.taxTotal)}</td></tr>
           <tr><td>Labor (included in subtotal — shown separately, not added twice)</td><td style={{ textAlign: 'right' }}>${money(totals.labor)}</td></tr>
           <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>${money(totals.total)}</strong></td></tr>
         </tbody>
