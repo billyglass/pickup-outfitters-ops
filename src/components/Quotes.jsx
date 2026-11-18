@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
 import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
@@ -7,8 +7,16 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
 
-export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError }) {
+export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, onOpened }) {
   const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
+  // Open a specific quote on mount (e.g. clicked from the Vehicles tab).
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (!openQuoteId || openedRef.current) return
+    const q = data.quotes.find((x) => x.id === openQuoteId)
+    if (q) { openedRef.current = true; setEditing(q); onOpened?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')

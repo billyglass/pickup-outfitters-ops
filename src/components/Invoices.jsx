@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
 import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
@@ -7,8 +7,16 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
-export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError }) {
+export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, onOpened }) {
   const [editing, setEditing] = useState(undefined)
+  // Open a specific invoice on mount (e.g. clicked from the Vehicles tab).
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (!openInvoiceId || openedRef.current) return
+    const inv = data.invoices.find((i) => i.id === openInvoiceId)
+    if (inv) { openedRef.current = true; setEditing(inv); onOpened?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')

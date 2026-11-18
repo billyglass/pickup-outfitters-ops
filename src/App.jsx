@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName } from './lib/tickets.js'
+import { normalizeVin } from './lib/csv.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
@@ -50,6 +51,11 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   const [editingCustomer, setEditingCustomer] = useState(undefined) // undefined = list, null = new, object = edit
   const [editingVehicle, setEditingVehicle] = useState(undefined)
+  // Vehicles tab: expanded vehicle (full ticket history) + deep-link to open
+  // a specific invoice/quote clicked from a vehicle row.
+  const [expandedVehicleId, setExpandedVehicleId] = useState(null)
+  const [openInvoiceId, setOpenInvoiceId] = useState(null)
+  const [openQuoteId, setOpenQuoteId] = useState(null)
   const [preselectedCustomerId, setPreselectedCustomerId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
@@ -208,6 +214,19 @@ export default function App() {
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
   const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
+  // Tickets tied to a vehicle: by vehicle_id, or by the VIN in the ticket's
+  // snapshot (covers older tickets saved before the link was stored).
+  const ticketsForVehicle = (v) => {
+    const vin = normalizeVin(v.vin || '')
+    const match = (t) => t.vehicle_id === v.id || (vin !== '' && normalizeVin(t.vehicle_snapshot?.vin || '') === vin)
+    const newestFirst = (a, b) =>
+      String(b.issue_date || b.created_at || '').localeCompare(String(a.issue_date || a.created_at || '')) ||
+      String(b.number || '').localeCompare(String(a.number || ''))
+    return {
+      invoices: data.invoices.filter(match).sort(newestFirst),
+      quotes: data.quotes.filter(match).sort(newestFirst),
+    }
+  }
 
   return (
     <div>
@@ -448,20 +467,70 @@ export default function App() {
                 <p className="muted">Vehicles are created automatically from quotes and invoices — enter the VIN and Year/Make/Model on the ticket and it shows up here. Use Edit below to correct a typo on a vehicle record.</p>
                 <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Filter by VIN, fleet/unit, make…" style={{ marginTop: 12 }} />
                 <table>
-                  <thead><tr><th>Vehicle</th><th>VIN</th><th>Fleet / unit</th><th>Customer</th><th></th></tr></thead>
+                  <thead><tr><th>Vehicle</th><th>VIN</th><th>Fleet / unit</th><th>Customer</th><th>Invoices</th><th></th></tr></thead>
                   <tbody>
-                    {vehicles.map((v) => (
-                      <tr key={v.id}>
-                        <td>{v.year || ''} {v.make || ''} {v.model || ''}</td>
-                        <td>{v.vin || '—'}</td>
-                        <td>{v.fleet_unit || '—'}</td>
-                        <td>{customerName(v.customer_id)}</td>
-                        <td>
-                          <button className="btn secondary" onClick={() => setEditingVehicle(v)}>Edit</button>{' '}
-                          {isAdmin && <button className="btn secondary" onClick={() => handleDeleteVehicle(v.id)}>Delete</button>}
-                        </td>
-                      </tr>
-                    ))}
+                    {vehicles.map((v) => {
+                      const { invoices: vInvoices, quotes: vQuotes } = ticketsForVehicle(v)
+                      const shown = vInvoices.slice(0, 3)
+                      const expanded = expandedVehicleId === v.id
+                      const openInvoice = (inv) => { setOpenInvoiceId(inv.id); setTab('invoices') }
+                      const openQuote = (q) => { setOpenQuoteId(q.id); setTab('quotes') }
+                      return (
+                        <Fragment key={v.id}>
+                          <tr>
+                            <td>{v.year || ''} {v.make || ''} {v.model || ''}</td>
+                            <td>{v.vin || '—'}</td>
+                            <td>{v.fleet_unit || '—'}</td>
+                            <td>{customerName(v.customer_id)}</td>
+                            <td>
+                              {vInvoices.length === 0 ? (
+                                <span className="muted">—</span>
+                              ) : (
+                                <>
+                                  {shown.map((inv, i) => (
+                                    <span key={inv.id}>
+                                      {i > 0 ? ', ' : ''}
+                                      <button type="button" onClick={() => openInvoice(inv)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', cursor: 'pointer' }}>{inv.number}</button>
+                                    </span>
+                                  ))}
+                                  {vInvoices.length > 3 && (
+                                    <button type="button" className="btn secondary" style={{ marginLeft: 6 }} onClick={() => setExpandedVehicleId(v.id)}>+{vInvoices.length - 3} more</button>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                            <td>
+                              <button className="btn secondary" onClick={() => setExpandedVehicleId(expanded ? null : v.id)}>{expanded ? 'Hide history' : 'History'}</button>{' '}
+                              <button className="btn secondary" onClick={() => setEditingVehicle(v)}>Edit</button>{' '}
+                              {isAdmin && <button className="btn secondary" onClick={() => handleDeleteVehicle(v.id)}>Delete</button>}
+                            </td>
+                          </tr>
+                          {expanded && (
+                            <tr>
+                              <td colSpan={6} style={{ background: '#fafafa' }}>
+                                <h3 style={{ marginTop: 0 }}>History — {v.year || ''} {v.make || ''} {v.model || ''} · VIN {v.vin || '—'}</h3>
+                                <h4 style={{ margin: '8px 0 4px' }}>Invoices ({vInvoices.length})</h4>
+                                {vInvoices.length === 0 && <p className="muted">No invoices tied to this vehicle yet.</p>}
+                                {vInvoices.map((inv) => (
+                                  <div key={inv.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
+                                    <button type="button" onClick={() => openInvoice(inv)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{inv.number}</button>
+                                    {' '}· {inv.status} · {inv.issue_date || (inv.created_at || '').slice(0, 10)} · {ticketCustomerName(inv, data.customers)} · ${Number(inv.total || 0).toFixed(2)}
+                                  </div>
+                                ))}
+                                <h4 style={{ margin: '12px 0 4px' }}>Quotes ({vQuotes.length})</h4>
+                                {vQuotes.length === 0 && <p className="muted">No quotes tied to this vehicle yet.</p>}
+                                {vQuotes.map((q) => (
+                                  <div key={q.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
+                                    <button type="button" onClick={() => openQuote(q)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{q.number}</button>
+                                    {' '}· {q.status} · {q.issue_date || (q.created_at || '').slice(0, 10)} · {ticketCustomerName(q, data.customers)} · ${Number(q.total || 0).toFixed(2)}
+                                  </div>
+                                ))}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
                   </tbody>
                 </table>
                 {vehicles.length === 0 && <p className="muted">No vehicles yet — create a quote or invoice and enter the VIN and Year/Make/Model on the ticket, and the vehicle will appear here.</p>}
@@ -471,10 +540,10 @@ export default function App() {
         )}
 
         {tab === 'quotes' && (
-          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} />
+          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} onOpened={() => setOpenQuoteId(null)} />
         )}
         {tab === 'invoices' && (
-          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} />
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} />
         )}
         {tab === 'products' && isAdmin && (
           <Products data={data} isAdmin={isAdmin} onReload={loadData} onError={setError} />
