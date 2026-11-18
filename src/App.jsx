@@ -279,11 +279,11 @@ export default function App() {
             <div className="grid">
               <div className="tile"><div className="num">{data.customers.length}</div><div className="label">Customers</div></div>
               <div className="tile"><div className="num">{data.vehicles.length}</div><div className="label">Vehicles</div></div>
-              <div className="tile"><div className="num">{data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status)).length}</div><div className="label">Outstanding quotes</div></div>
+              <div className="tile"><div className="num">{data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).length}</div><div className="label">Open quotes</div></div>
               <div className="tile"><div className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).length}</div><div className="label">Open invoices</div></div>
               {isAdmin && (
                 <>
-                  <div className="tile"><div className="num">${data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status)).reduce((s, q) => s + Number(q.total || 0), 0).toFixed(2)}</div><div className="label">Outstanding quote value</div></div>
+                  <div className="tile"><div className="num">${data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).reduce((s, q) => s + Number(q.total || 0), 0).toFixed(2)}</div><div className="label">Open quote value</div></div>
                   <div className="tile"><div className="num">${data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0).toFixed(2)}</div><div className="label">Open invoice balance</div></div>
                 </>
               )}
@@ -311,7 +311,7 @@ export default function App() {
               </select>
               <select value={searchFilters.status} onChange={(e) => setSearchFilters({ ...searchFilters, status: e.target.value })}>
                 <option value="">Any status</option>
-                {['Draft', 'Sent', 'Accepted', 'Declined', 'Expired', 'Issued', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
+                {['Open', 'Lost', 'Issued', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
               </select>
               <select value={searchFilters.customerId} onChange={(e) => setSearchFilters({ ...searchFilters, customerId: e.target.value })}>
                 <option value="">Any customer</option>

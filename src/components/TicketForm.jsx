@@ -21,7 +21,7 @@ export default function TicketForm({
   const taxRate = Number(settings?.tax_rate ?? TAX_RATE)
   const [ticket, setTicket] = useState(() => {
     if (initial) return { ...initial }
-    // Duplicate (prefill): a new Draft with no id/number — Save allocates a
+    // Duplicate (prefill): a new ticket with no id/number — Save allocates a
     // new atomic number. The original ticket is never touched.
     if (prefill) return { ...prefill }
     const issue = todayStr()
@@ -30,7 +30,7 @@ export default function TicketForm({
       vehicle_id: '',
       salesperson_id: user?.id || '',
       created_by: user?.id || '',
-      status: 'Draft',
+      status: isQuote ? 'Open' : 'Draft',
       po_number: '',
       payment_terms: settings?.default_payment_terms || 'Net 30',
       customer_notes: '',
@@ -118,14 +118,15 @@ export default function TicketForm({
     !customerFilter.trim() || c.company.toLowerCase().includes(customerFilter.toLowerCase())
   )
 
-  // Edit rules: Sales edit Draft quotes and Draft / Issued / Partially Paid
-  // invoices. Paid / Void / closed-period invoices are locked to Sales
+  // Edit rules: Sales edit Open quotes and Draft / Issued / Partially Paid
+  // invoices. Lost quotes and converted quotes (won — they live as invoices
+  // now) are locked to Sales, as are Paid / Void / closed-period invoices
   // (the DB invoice_guard enforces this too). Admin may correct any ticket
   // except a Void one; Admin edits to a Paid invoice keep a revision/audit
   // trail via the audit trigger.
   const lockedForSales =
     initial && (
-      (isQuote && initial.status !== 'Draft') ||
+      (isQuote && (initial.status !== 'Open' || initial.converted_invoice_id)) ||
       (!isQuote && (initial.status === 'Paid' || initial.status === 'Void' || initial.accounting_period_closed))
     )
   const editable = !initial || isAdmin ? initial?.status !== 'Void' : !lockedForSales
@@ -159,16 +160,22 @@ export default function TicketForm({
     setConflict('')
     setStatus('saving')
     try {
+      // Snapshots freeze once a ticket leaves its open state — for quotes
+      // that is any status other than Open (Lost, or already converted to
+      // an invoice and won); for invoices, any status other than Draft.
+      // A frozen snapshot is kept exactly as it was, so later customer /
+      // vehicle edits don't rewrite history.
+      const snapshotFrozen = initial && (initial.converted_invoice_id || (isQuote ? initial.status !== 'Open' : initial.status !== 'Draft'))
       // Walk-in: the snapshot IS the customer (name + phone live nowhere
-      // else), built fresh from the fields — except on a non-Draft walk-in
-      // ticket, where the snapshot is frozen like any issued ticket.
-      // Customer-linked: frozen snapshot on non-Draft tickets, fresh from
+      // else), built fresh from the fields — except on a frozen walk-in
+      // ticket, where the snapshot is kept as it was.
+      // Customer-linked: frozen snapshot on frozen tickets, fresh from
       // the customer record otherwise.
       const snapCustomer = walkIn
-        ? (initial && !prefill && initial.status !== 'Draft' && isWalkInTicket(initial)
+        ? (initial && !prefill && snapshotFrozen && isWalkInTicket(initial)
             ? initial.customer_snapshot
             : walkInCustomerSnapshot(walkInFields.name, walkInFields.phone, walkInFields.email))
-        : initial && initial.status !== 'Draft'
+        : initial && snapshotFrozen
           ? initial.customer_snapshot
           : customerSnapshot(customer, contacts, addresses)
       // The vehicle snapshot is ALWAYS built from this ticket's own vehicle

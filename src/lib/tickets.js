@@ -282,7 +282,7 @@ export function resolveVehicleUpsert(vehicles, customerId, fields) {
 }
 
 export function duplicateTicket(kind, source, sourceLines, userId, settings) {
-  // Fleet duplicate: build a NEW Draft ticket prefilled from a source ticket.
+  // Fleet duplicate: build a NEW ticket prefilled from a source ticket.
   // Pure function — nothing is saved here. The caller opens TicketForm with
   // the result; only Save creates the record, with a NEW atomic number.
   // Carries over: customer, vehicle (same one, for the user to change),
@@ -290,7 +290,8 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   // Does NOT carry over: id, number, previous_numbers, quote_id (a duplicate
   // is not a conversion), converted_invoice_id, follow-up date, payments /
   // balance history, created_by (reset to the current user), version.
-  // Void sources are fine to copy — the copy is a fresh Draft.
+  // Void sources are fine to copy — the copy is fresh (Open for quotes,
+  // Draft for invoices).
   const issue = todayStr()
   // source.number already carries its full prefix (QT-1001, QT-A1003,
   // INV-1002, ...) — do not prepend another one.
@@ -305,7 +306,7 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
     vehicle_snapshot: source.vehicle_snapshot || null,
     salesperson_id: userId || source.salesperson_id || '',
     created_by: userId || '',
-    status: 'Draft',
+    status: kind === 'quote' ? 'Open' : 'Draft',
     po_number: source.po_number || '',
     payment_terms: source.payment_terms || settings?.default_payment_terms || 'Net 30',
     customer_notes: source.customer_notes || '',

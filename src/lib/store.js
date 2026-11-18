@@ -279,8 +279,9 @@ async function sbSyncLines(kind, parentId, lines) {
   }
   for (const id of existingIds) {
     if (!keepIds.has(id)) {
-      // Draft parents only for non-Admins — see migration 002 (delete policy
-      // for lines on Draft tickets). Admins may delete any line.
+      // Open-quote / Draft-invoice parents only for non-Admins — see
+      // migration 002 (delete policy for lines on editable tickets, and
+      // migration 008 for the Open quote status). Admins may delete any line.
       const { error } = await supabase.from(table).delete().eq('id', id)
       if (error) throw error
     }

@@ -5,7 +5,11 @@ import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
-const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
+// Quotes have exactly two statuses: Open and Lost. Converting an Open
+// quote to an invoice means it was won — the quote leaves this list
+// (hidden by converted_invoice_id, never deleted) and lives as an invoice.
+const STATUSES = ['Open', 'Lost']
+const VIEWS = ['Open', 'Lost', 'All']
 
 export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, onOpened, onOpenInvoice }) {
   const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
@@ -21,9 +25,8 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')
   const [fSales, setFSales] = useState('')
-  const [fStatus, setFStatus] = useState('')
   const [fAge, setFAge] = useState('')
-  const [outstandingOnly, setOutstandingOnly] = useState(true)
+  const [view, setView] = useState('Open') // Open (default — the sales list) / Lost / All
   const [busy, setBusy] = useState('')
   const [convertMsg, setConvertMsg] = useState('')
   const [convertedInvoice, setConvertedInvoice] = useState(null) // { id, number } of the invoice just created / already linked
@@ -34,13 +37,22 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const customerOf = (q) => ticketCustomerName(q, data.customers)
   const linesOf = (id) => (data.quoteLines || []).filter((l) => l.quote_id === id)
 
+  // Converted quotes never appear in this tab — they were won and live as
+  // invoices now. They are still findable by global search on their QT-A
+  // number, and the invoice links back to the original quote.
+  const isConverted = (q) => !!q.converted_invoice_id
+  const openQuotes = data.quotes.filter((q) => q.status === 'Open' && !isConverted(q))
+  const openValue = openQuotes.reduce((s, q) => s + Number(q.total || 0), 0)
+
   const filtered = useMemo(() => {
-    return data.quotes.filter((q) => {
-      if (outstandingOnly && !['Draft', 'Sent', 'Accepted'].includes(q.status)) return false
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = data.quotes.filter((q) => {
+      if (isConverted(q)) return false
+      if (view === 'Open' && q.status !== 'Open') return false
+      if (view === 'Lost' && q.status !== 'Lost') return false
       if (fCustomer === 'walk-in' && q.customer_id) return false
       if (fCustomer && fCustomer !== 'walk-in' && q.customer_id !== fCustomer) return false
       if (fSales && q.salesperson_id !== fSales) return false
-      if (fStatus && q.status !== fStatus) return false
       if (fAge) {
         const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10)) ?? 0
         if (fAge === '<7' && age >= 7) return false
@@ -50,10 +62,18 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       }
       return true
     })
-  }, [data.quotes, outstandingOnly, fCustomer, fSales, fStatus, fAge])
+    // Sales list order: follow-up due first, then oldest first — the
+    // quotes that have waited longest get chased first.
+    const dateOf = (q) => q.issue_date || (q.created_at || '').slice(0, 10) || ''
+    return rows.sort((a, b) => {
+      const dueA = a.follow_up_on && a.follow_up_on <= today ? 0 : 1
+      const dueB = b.follow_up_on && b.follow_up_on <= today ? 0 : 1
+      if (dueA !== dueB) return dueA - dueB
+      return dateOf(a) < dateOf(b) ? -1 : dateOf(a) > dateOf(b) ? 1 : 0
+    })
+  }, [data.quotes, view, fCustomer, fSales, fAge])
 
-  const outstanding = data.quotes.filter((q) => ['Draft', 'Sent', 'Accepted'].includes(q.status))
-  const outstandingValue = outstanding.reduce((s, q) => s + Number(q.total || 0), 0)
+  const shownValue = filtered.reduce((s, q) => s + Number(q.total || 0), 0)
 
   async function setStatus(q, status) {
     setBusy(q.id)
@@ -63,12 +83,14 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
     } catch (err) { onError(err.message || 'Status change failed.') } finally { setBusy('') }
   }
 
-  // Convert is on EVERY open quote, not just Accepted ones — Bill couldn't
-  // find the button because Draft/Sent quotes had none. Draft/Sent quotes
-  // convert too, but only after confirming they should be marked Accepted.
-  // Declined/Expired quotes never convert. Already-converted quotes show
-  // the invoice instead of converting again.
-  const canConvert = (q) => !q.converted_invoice_id && !['Declined', 'Expired'].includes(q.status)
+  async function markLost(q) {
+    if (!window.confirm(`Mark quote ${q.number} as lost? It moves to the Lost list — you can reopen it later if the customer comes back.`)) return
+    await setStatus(q, 'Lost')
+  }
+
+  // Convert is on every Open quote. Converting means the quote was won —
+  // the invoice is created and the quote leaves this list.
+  const canConvert = (q) => q.status === 'Open' && !q.converted_invoice_id
   const convertedInvoiceOf = (q) => data.invoices.find((i) => i.id === q.converted_invoice_id) || null
 
   async function convert(q, opts = {}) {
@@ -78,32 +100,30 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       setConvertMsg(`This quote was already converted${existing ? ` to invoice ${existing.number}` : ''}.`)
       return
     }
-    if (['Declined', 'Expired'].includes(q.status)) return
-    if (q.status !== 'Accepted') {
-      if (!window.confirm(`Quote ${q.number} hasn't been accepted yet. Convert it to an invoice anyway and mark it Accepted?${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
-    } else if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number (INV-…) will be assigned from the invoice sequence. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    if (q.status !== 'Open') return
+    if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number (INV-…) will be assigned from the invoice sequence. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
     setBusy(`convert-${q.id}`)
     setConvertMsg('')
     setConvertedInvoice(null)
     try {
-      // Draft/Sent quotes become Accepted as part of the conversion.
-      const quoteToConvert = q.status === 'Accepted' ? q : { ...q, status: 'Accepted' }
-      if (q.status !== 'Accepted') await store.setTicketStatus('quote', q, 'Accepted', user?.id)
-      const invoice = await store.convertQuoteToInvoice(quoteToConvert, linesOf(q.id), user?.id, data)
+      const invoice = await store.convertQuoteToInvoice(q, linesOf(q.id), user?.id, data)
       setConvertedInvoice({ id: invoice.id, number: invoice.number })
-      setConvertMsg(`Converted to invoice ${invoice.number}.`)
+      setConvertMsg(`Converted to invoice ${invoice.number}. The quote is won and leaves this list.`)
+      // Converting from the open form: close it so the list shows, with the
+      // success message and the Open invoice button.
+      if (opts.fromForm) setEditing(undefined)
       await onReload()
     } catch (err) { onError(err.message || 'Conversion failed.') } finally { setBusy('') }
   }
 
   async function handleDelete(q) {
     if (!isAdmin) return
-    if (!window.confirm(`Delete quote ${q.number}? Drafts only — this cannot be undone.`)) return
+    if (!window.confirm(`Delete quote ${q.number}? Open quotes only — this cannot be undone.`)) return
     try { await store.deleteTicket('quote', q.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
-  // Fleet duplicate: opens a NEW Draft prefilled from the source — nothing
-  // is saved until the user clicks Save, which assigns a new QT-A number.
+  // Fleet duplicate: opens a NEW Open quote prefilled from the source —
+  // nothing is saved until the user clicks Save, which assigns a new QT-A number.
   function duplicate(q) {
     setEditing(undefined)
     setDuplicating(duplicateTicket('quote', q, linesOf(q.id), user?.id, settings))
@@ -178,10 +198,10 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   return (
     <div className="card">
       <div className="row-between">
-        <h2 style={{ margin: 0 }}>Quotes — Outstanding ({outstanding.length}) · ${outstandingValue.toFixed(2)}</h2>
+        <h2 style={{ margin: 0 }}>Quotes — {view} ({filtered.length}) · ${shownValue.toFixed(2)}{view === 'Open' ? ' to go after' : ''}</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
       </div>
-      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Every open quote has a Convert to invoice button — converting an Accepted quote creates the invoice with no retyping, and it can only be converted once. A Draft or Sent quote asks first and is marked Accepted when converted. Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.</p>
+      <p className="muted small">Open quotes are the ones to go after — follow-up due and oldest first. Mark a quote Lost when the customer says no; reopen it anytime. Converting an Open quote to an invoice means you won it — it leaves this list and lives as an invoice. Quotes expire {settings?.quote_validity_days ?? 15} days after the issue date. Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.</p>
       {convertMsg && (
         <div className="success">
           {convertMsg}{' '}
@@ -191,7 +211,13 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         </div>
       )}
       <div className="row" style={{ marginTop: 12 }}>
-        <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={outstandingOnly} onChange={(e) => setOutstandingOnly(e.target.checked)} /> Outstanding only</label>
+        <div className="row" role="group" aria-label="Quote list">
+          {VIEWS.map((v) => (
+            <button key={v} type="button" className={view === v ? 'btn' : 'btn secondary'} onClick={() => setView(v)}>
+              {v === 'Open' ? `Open (${openQuotes.length})` : v === 'Lost' ? `Lost (${data.quotes.filter((q) => q.status === 'Lost' && !isConverted(q)).length})` : 'All'}
+            </button>
+          ))}
+        </div>
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
           <option value="walk-in">Walk-in (no customer record)</option>
@@ -200,10 +226,6 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
           {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s}>{s}</option>)}
         </select>
         <select value={fAge} onChange={(e) => setFAge(e.target.value)}>
           <option value="">Any age</option>
@@ -222,7 +244,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
             const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10))
             return (
               <tr key={q.id}>
-                <td><strong>{q.number}</strong>{q.converted_invoice_id ? <div className="muted small">→ converted</div> : ''}</td>
+                <td><strong>{q.number}</strong></td>
                 <td>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
                 <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
                 <td>{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
@@ -237,20 +259,12 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                     <button className="btn secondary" onClick={() => setPrinting(q)}>Print</button>
                     <button className="btn secondary" onClick={() => duplicate(q)}>Duplicate</button>
                     {isWalkInTicket(q) && <button className="btn secondary" onClick={() => setSaveAs(q)}>Save as customer</button>}
-                    {q.status === 'Draft' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Sent')}>Send</button>}
-                    {q.status === 'Sent' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Accepted')}>Accept</button>}
-                    {['Draft', 'Sent'].includes(q.status) && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Declined')}>Decline</button>}
+                    {q.status === 'Open' && <button className="btn secondary" disabled={busy === q.id} onClick={() => markLost(q)}>Mark lost</button>}
+                    {q.status === 'Lost' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Open')}>Reopen</button>}
                     {canConvert(q) && (
                       <button className="btn" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
                     )}
-                    {q.converted_invoice_id && (
-                      convertedInvoiceOf(q) && onOpenInvoice ? (
-                        <button className="btn secondary" onClick={() => onOpenInvoice(convertedInvoiceOf(q))}>Converted — {convertedInvoiceOf(q).number}</button>
-                      ) : (
-                        <span className="muted small">Converted</span>
-                      )
-                    )}
-                    {isAdmin && q.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(q)}>Delete</button>}
+                    {isAdmin && q.status === 'Open' && <button className="btn danger" onClick={() => handleDelete(q)}>Delete</button>}
                   </div>
                 </td>
               </tr>

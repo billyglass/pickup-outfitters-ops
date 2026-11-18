@@ -287,8 +287,8 @@ create table if not exists public.quotes (
   vehicle_id uuid references public.vehicles (id),
   salesperson_id uuid references auth.users (id),
   created_by uuid references auth.users (id),
-  status text not null default 'Draft'
-    check (status in ('Draft', 'Sent', 'Accepted', 'Declined', 'Expired')),
+  status text not null default 'Open'
+    check (status in ('Open', 'Lost')),
   issue_date date,
   expires_on date,
   follow_up_on date,
