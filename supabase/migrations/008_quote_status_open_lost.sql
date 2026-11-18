@@ -13,11 +13,10 @@
 -- needed for them. Invoice statuses are NOT touched (Draft/Issued/
 -- Partially Paid/Paid/Void stay as they are).
 
-update public.quotes set status = 'Open' where status in ('Draft', 'Sent', 'Accepted');
-update public.quotes set status = 'Lost' where status in ('Declined', 'Expired');
-
--- Drop the old status check constraint, whatever it is named (inline
--- checks get auto-generated names), then add the new two-status check.
+-- FIX (Nov 18): the old check constraint must be dropped BEFORE updating
+-- statuses — the first run failed with check violation 23514 because the
+-- update to 'Open' ran while the old Draft/Sent/Accepted/Declined/Expired
+-- check was still in place. Nothing was changed by the failed run.
 do $$
 declare
   r record;
@@ -30,6 +29,9 @@ begin
     execute 'alter table public.quotes drop constraint ' || quote_ident(r.conname);
   end loop;
 end $$;
+
+update public.quotes set status = 'Open' where status in ('Draft', 'Sent', 'Accepted');
+update public.quotes set status = 'Lost' where status in ('Declined', 'Expired');
 
 alter table public.quotes add constraint quotes_status_check check (status in ('Open', 'Lost'));
 alter table public.quotes alter column status set default 'Open';
