@@ -139,6 +139,7 @@ $$;
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   company text not null,
+  customer_type text not null default 'Retail' check (customer_type in ('Retail', 'Fleet')),
   tax_exempt boolean not null default false,
   tax_exempt_doc_note text,
   payment_terms text not null default 'Net 30',
@@ -154,6 +155,7 @@ create table if not exists public.customers (
 create index if not exists customers_company_trgm_idx
   on public.customers using gin (company gin_trgm_ops);
 create index if not exists customers_created_idx on public.customers (created_at desc);
+create index if not exists customers_type_idx on public.customers (customer_type);
 
 create table if not exists public.contacts (
   id uuid primary key default gen_random_uuid(),

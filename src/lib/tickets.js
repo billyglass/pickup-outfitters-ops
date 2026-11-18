@@ -1,4 +1,4 @@
-import { normalizeVin } from './csv.js'
+import { normalizeVin, normalizePhone } from './csv.js'
 
 // Pure ticket math + snapshots, shared by TicketForm, print, and search.
 // Money: numeric(12,2) in the DB, half-up rounding to cents, per line.
@@ -328,6 +328,32 @@ export function walkInCustomerSnapshot(name, phone, email) {
 
 export function isWalkInTicket(ticket) {
   return !ticket?.customer_id && !!ticket?.customer_snapshot?.walk_in
+}
+
+// --- Fleet vs Retail customers ---------------------------------------------
+// Bill's rule (Nov 18): Pickup Outfitters is both a fleet shop and a
+// regular retail store. Every customer is Retail or Fleet (default Retail),
+// so the Customers tab and search can separate them.
+export function customerTypeOf(customer) {
+  return customer?.customer_type === 'Fleet' ? 'Fleet' : 'Retail'
+}
+
+// Find an existing customer by a walk-in's phone (digits only) or email
+// (case-insensitive) — used by "Save walk-in as customer" so a repeat
+// buyer is linked to their existing record instead of creating a duplicate.
+// Contacts are the source: a phone/email lives on a contact row, and the
+// contact points at the customer. Returns the customer record or null.
+export function findCustomerByPhoneOrEmail(customers, contacts, phone, email) {
+  const digits = normalizePhone(phone)
+  const mail = String(email || '').trim().toLowerCase()
+  if (!digits && !mail) return null
+  const hit = (contacts || []).find((c) => {
+    if (digits && normalizePhone(c.phone) && normalizePhone(c.phone) === digits) return true
+    if (mail && String(c.email || '').trim().toLowerCase() === mail) return true
+    return false
+  })
+  if (!hit) return null
+  return (customers || []).find((c) => c.id === hit.customer_id) || null
 }
 
 // Display name for a ticket's customer: the walk-in name for walk-ins, the

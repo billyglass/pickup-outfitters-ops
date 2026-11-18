@@ -5,7 +5,7 @@ import {
   computeTotals, money, lineTotal, emptyLine, addDays, todayStr,
   dueDateFor, termsDays, customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
-  walkInCustomerSnapshot, isWalkInTicket,
+  walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -73,6 +73,17 @@ export default function TicketForm({
       email: s.email || '',
     }
   })
+  // Save this walk-in as a real customer (unchecked by default — one-offs
+  // stay one-offs). On save, the buyer becomes a customer record (Retail
+  // or Fleet) and the ticket links to it, so their history builds up.
+  const [saveAsCustomer, setSaveAsCustomer] = useState(false)
+  const [saveAsType, setSaveAsType] = useState('Retail')
+  // If a customer with this phone/email already exists, saving will link
+  // to them instead of creating a duplicate — say so up front.
+  const walkInExistingCustomer = useMemo(
+    () => (walkIn ? findCustomerByPhoneOrEmail(customers, contacts, walkInFields.phone, walkInFields.email) : null),
+    [walkIn, customers, contacts, walkInFields.phone, walkInFields.email] // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   const customer = customers.find((c) => c.id === ticket.customer_id) || null
   const vinNorm = normalizeVin(veh.vin)
@@ -180,6 +191,24 @@ export default function TicketForm({
         lines,
         user?.id
       )
+      // Walk-in + "save as customer": the ticket is saved first (as a
+      // walk-in), then the buyer becomes a customer record and the ticket
+      // links to it. If that second step fails, the ticket itself is still
+      // saved — say so and keep the form open so it can be retried.
+      if (walkIn && saveAsCustomer) {
+        try {
+          const linked = await store.saveWalkInAsCustomer(kind, saved, saveAsType, user?.id)
+          setTicket(linked.ticket)
+          setStatus('saved')
+          onSaved(linked.ticket, { savedAsCustomer: linked.customer, linkedExisting: linked.linkedExisting })
+          return
+        } catch (saveErr) {
+          setTicket(saved)
+          setStatus('saved')
+          setError(`Ticket saved as a walk-in, but saving the customer failed: ${saveErr.message || 'Save failed.'} Close and use "Save as customer" on the ticket to retry.`)
+          return
+        }
+      }
       setTicket(saved)
       setStatus('saved')
       onSaved(saved)
@@ -228,14 +257,36 @@ export default function TicketForm({
               <input value={walkInFields.phone} disabled={readOnly} autoComplete="off" placeholder="Phone number" onChange={(e) => { setWalkInFields((f) => ({ ...f, phone: e.target.value })); setStatus('unsaved') }} />
               <label>Email (optional)</label>
               <input value={walkInFields.email} disabled={readOnly} autoComplete="off" placeholder="Email (optional)" onChange={(e) => { setWalkInFields((f) => ({ ...f, email: e.target.value })); setStatus('unsaved') }} />
-              <p className="muted small">Walk-in / one-off — no customer record is created. The name and phone print on the ticket and are searchable.</p>
+              <label style={{ marginTop: 12 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={saveAsCustomer} disabled={readOnly} onChange={(e) => { setSaveAsCustomer(e.target.checked); setStatus('unsaved') }} />{' '}
+                Save this person as a customer for next time
+              </label>
+              {saveAsCustomer && (
+                <>
+                  <label>Customer type</label>
+                  <div className="row" role="group" aria-label="New customer type">
+                    <label style={{ margin: 0 }}>
+                      <input type="radio" name="wi-type" style={{ width: 'auto' }} checked={saveAsType === 'Retail'} disabled={readOnly} onChange={() => setSaveAsType('Retail')} /> Retail
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      <input type="radio" name="wi-type" style={{ width: 'auto' }} checked={saveAsType === 'Fleet'} disabled={readOnly} onChange={() => setSaveAsType('Fleet')} /> Fleet
+                    </label>
+                  </div>
+                  {walkInExistingCustomer ? (
+                    <p className="muted small">A customer with this phone/email already exists ({walkInExistingCustomer.company} — {customerTypeOf(walkInExistingCustomer)}). Saving will link this ticket to them instead of creating a duplicate.</p>
+                  ) : (
+                    <p className="muted small">On save, a {saveAsType} customer record is created from this name + phone, and this ticket links to it — so next time they come back you can look up everything they've bought.</p>
+                  )}
+                </>
+              )}
+              <p className="muted small">Walk-in / one-off — no customer record is created unless you check the box above. The name and phone print on the ticket and are searchable.</p>
             </>
           ) : (
             <>
               <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter customers…" disabled={readOnly} />
               <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value })}>
                 <option value="">— Choose customer —</option>
-                {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+                {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
               </select>
               {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
             </>

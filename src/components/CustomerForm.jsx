@@ -6,7 +6,7 @@ const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', cit
 
 export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, onSaved, onCancel }) {
   const [customer, setCustomer] = useState(
-    initial || { company: '', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
+    initial || { company: '', customer_type: 'Retail', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
   )
   const [contacts, setContacts] = useState(
     initialContacts?.length ? initialContacts : [emptyContact()]
@@ -82,6 +82,18 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
             <option>COD</option>
           </select>
         </div>
+      </div>
+      <div>
+        <label>Customer type</label>
+        <div className="row" role="group" aria-label="Customer type">
+          <label style={{ margin: 0 }}>
+            <input type="radio" name="cf-type" style={{ width: 'auto' }} checked={(customer.customer_type || 'Retail') === 'Retail'} onChange={() => markDirty({ customer_type: 'Retail' })} /> Retail
+          </label>
+          <label style={{ margin: 0 }}>
+            <input type="radio" name="cf-type" style={{ width: 'auto' }} checked={customer.customer_type === 'Fleet'} onChange={() => markDirty({ customer_type: 'Fleet' })} /> Fleet
+          </label>
+        </div>
+        <p className="muted small">Fleet = a business / fleet account. Retail = a regular retail customer. This is how you separate fleet from retail when searching customers.</p>
       </div>
       <label>
         <input

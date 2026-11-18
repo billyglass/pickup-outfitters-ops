@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail } from './tickets.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -90,6 +90,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
       .from('customers')
       .update({
         company: customer.company,
+        customer_type: customerTypeOf(customer),
         tax_exempt: customer.tax_exempt,
         tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
         payment_terms: customer.payment_terms || 'Net 30',
@@ -110,6 +111,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
     .from('customers')
     .insert({
       company: customer.company,
+      customer_type: customerTypeOf(customer),
       tax_exempt: customer.tax_exempt,
       tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
       payment_terms: customer.payment_terms || 'Net 30',
@@ -554,6 +556,133 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
   return invoice
 }
 
+// --- Save a walk-in as a customer -------------------------------------------
+// Bill's rule (Nov 18): a walk-in buyer can become a real customer so a
+// repeat buyer has a history — every ticket they ever bought shows under
+// them. Two call sites: (a) the ticket form, when "Save this person as a
+// customer for next time" is checked on save; (b) a "Save as customer"
+// button on an already-saved walk-in ticket.
+// Create-or-link: a customer with the same phone (digits only) or email
+// already on file is LINKED, never duplicated. A new customer gets the
+// type chosen on the ticket (Retail / Fleet, default Retail), the walk-in
+// name as the primary contact, and a note saying where it came from.
+// The ticket is then linked (customer_id + a fresh snapshot built from the
+// customer record, so it stops being a walk-in) and the ticket's vehicle,
+// if it has no customer yet, is linked to the new customer too.
+async function sbSaveWalkInAsCustomer(kind, ticket, customerType, userId) {
+  if (!ticket || ticket.customer_id || !isWalkInTicket(ticket)) {
+    throw new Error('This ticket already has a customer.')
+  }
+  const snap = ticket.customer_snapshot || {}
+  const name = (snap.contact_name || snap.company || '').trim()
+  if (!name) throw new Error('The walk-in ticket has no name to save as a customer.')
+  const phone = (snap.phone || '').trim()
+  const email = (snap.email || '').trim()
+  const type = customerType === 'Fleet' ? 'Fleet' : 'Retail'
+  const [customersRes, contactsRes] = await Promise.all([
+    supabase.from('customers').select('id, company, customer_type, payment_terms, tax_exempt'),
+    supabase.from('contacts').select('id, customer_id, name, phone, email'),
+  ])
+  if (customersRes.error) throw customersRes.error
+  if (contactsRes.error) throw contactsRes.error
+  const customers = customersRes.data || []
+  const contacts = contactsRes.data || []
+  let customer = findCustomerByPhoneOrEmail(customers, contacts, phone, email)
+  let linkedExisting = false
+  if (customer) {
+    linkedExisting = true
+  } else {
+    customer = await sbSaveCustomer(
+      {
+        company: name,
+        customer_type: type,
+        tax_exempt: false,
+        payment_terms: 'Net 30',
+        notes: `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`,
+        po_requirements: '',
+      },
+      [{ name, phone: phone || null, email: email || null, title: '', is_primary: true }],
+      []
+    )
+  }
+  const snapshot = customerSnapshot(
+    customer,
+    [{ customer_id: customer.id, name, phone: phone || null, email: email || null, is_primary: true }],
+    []
+  )
+  const table = ticketTable(kind)
+  const { data: current, error: curErr } = await supabase.from(table).select('version').eq('id', ticket.id).single()
+  if (curErr) throw curErr
+  const { data: updated, error: updErr } = await supabase
+    .from(table)
+    .update({ customer_id: customer.id, customer_snapshot: snapshot })
+    .eq('id', ticket.id)
+    .eq('version', current.version)
+    .select()
+    .single()
+  if (updErr) throw updErr
+  if (!updated) throw new VersionConflict('This ticket changed since you opened it. Reload and try again.')
+  // Link the ticket's vehicle to the new customer — only if it has no
+  // customer yet (never steal a vehicle that belongs to someone else).
+  if (ticket.vehicle_id) {
+    const { data: veh } = await supabase.from('vehicles').select('id, customer_id').eq('id', ticket.vehicle_id).single()
+    if (veh && !veh.customer_id) {
+      await supabase.from('vehicles').update({ customer_id: customer.id }).eq('id', veh.id)
+    }
+  }
+  return { customer, ticket: updated, linkedExisting }
+}
+
+function localSaveWalkInAsCustomer(kind, ticket, customerType) {
+  if (!ticket || ticket.customer_id || !isWalkInTicket(ticket)) {
+    throw new Error('This ticket already has a customer.')
+  }
+  const snap = ticket.customer_snapshot || {}
+  const name = (snap.contact_name || snap.company || '').trim()
+  if (!name) throw new Error('The walk-in ticket has no name to save as a customer.')
+  const phone = (snap.phone || '').trim()
+  const email = (snap.email || '').trim()
+  const type = customerType === 'Fleet' ? 'Fleet' : 'Retail'
+  const customers = lsRead(LS_CUSTOMERS, [])
+  // Local mode stores no contacts, so match on the company name (a
+  // walk-in-created customer has company = the buyer's name).
+  let customer = customers.find((c) => String(c.company || '').trim().toLowerCase() === name.toLowerCase()) || null
+  let linkedExisting = false
+  const now = new Date().toISOString()
+  if (customer) {
+    linkedExisting = true
+  } else {
+    customer = {
+      id: uid(), company: name, customer_type: type, tax_exempt: false,
+      payment_terms: 'Net 30',
+      notes: `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`,
+      version: 1, created_at: now, updated_at: now,
+    }
+    lsWrite(LS_CUSTOMERS, [customer, ...customers])
+  }
+  const snapshot = {
+    company: customer.company, contact_name: name, phone: phone || null,
+    email: email || null, address: null, payment_terms: customer.payment_terms,
+    tax_exempt: !!customer.tax_exempt,
+  }
+  const key = kind === 'quote' ? LS_QUOTES : LS_INVOICES
+  const rows = lsRead(key, [])
+  const idx = rows.findIndex((r) => r.id === ticket.id)
+  if (idx < 0) throw new Error('Ticket not found in local mode.')
+  const updated = { ...rows[idx], customer_id: customer.id, customer_snapshot: snapshot, version: (rows[idx].version || 1) + 1, updated_at: now }
+  rows[idx] = updated
+  lsWrite(key, rows)
+  if (ticket.vehicle_id) {
+    const vehicles = lsRead(LS_VEHICLES, [])
+    const vi = vehicles.findIndex((v) => v.id === ticket.vehicle_id)
+    if (vi >= 0 && !vehicles[vi].customer_id) {
+      vehicles[vi] = { ...vehicles[vi], customer_id: customer.id }
+      lsWrite(LS_VEHICLES, vehicles)
+    }
+  }
+  return { customer, ticket: updated, linkedExisting }
+}
+
 async function sbSaveProduct(product, isAdmin) {
   if (!isAdmin) throw new Error('Only an Admin can manage products.')
   const payload = {
@@ -684,7 +813,10 @@ export async function globalSearch(query, state, filters = {}) {
 
   // Local mode: everything is already in state — filter it the same way.
   if (!supabaseConfigured) {
-    const customers = state.customers.filter((c) => c.company.toLowerCase().includes(lower))
+    const customers = state.customers.filter((c) =>
+      c.company.toLowerCase().includes(lower) &&
+      (!filters.customerType || customerTypeOf(c) === filters.customerType)
+    )
     const vehicles = state.vehicles.filter((v) =>
       vinMatches(v.vin) ||
       String(v.fleet_unit || '').toLowerCase().includes(lower) ||
@@ -710,8 +842,10 @@ export async function globalSearch(query, state, filters = {}) {
   }
 
   const like = `%${q}%`
+  const customersQuery = supabase.from('customers').select('*').ilike('company', like)
+  if (filters.customerType) customersQuery.eq('customer_type', filters.customerType)
   const [customers, contacts, vehicles, quotes, invoices, qLines, iLines] = await Promise.all([
-    supabase.from('customers').select('*').ilike('company', like).limit(20),
+    customersQuery.limit(20),
     supabase.from('contacts').select('*').or(`name.ilike.${like},email.ilike.${like},phone.ilike.${like}`).limit(20),
     supabase.from('vehicles').select('*').or(`vin_normalized.ilike.${like},fleet_unit.ilike.${like},plate.ilike.${like}`).limit(20),
     supabase.from('quotes').select('*').or(`number.ilike.${like},po_number.ilike.${like}`).limit(20),
@@ -820,12 +954,12 @@ export const store = {
         if (idx >= 0 && customers[idx].version !== customer.version) {
           throw new VersionConflict('This customer was changed by someone else. Reload and try again.')
         }
-        const saved = { ...customer, version: (customer.version || 1) + 1, updated_at: now }
+        const saved = { ...customer, customer_type: customerTypeOf(customer), version: (customer.version || 1) + 1, updated_at: now }
         customers[idx] = saved
         lsWrite(LS_CUSTOMERS, customers)
         return saved
       }
-      const saved = { ...customer, id: uid(), version: 1, created_at: now, updated_at: now }
+      const saved = { ...customer, customer_type: customerTypeOf(customer), id: uid(), version: 1, created_at: now, updated_at: now }
       lsWrite(LS_CUSTOMERS, [saved, ...customers])
       return saved
     }
@@ -943,6 +1077,11 @@ export const store = {
     return sbConvertQuoteToInvoice(quote, quoteLines, userId, state)
   },
 
+  async saveWalkInAsCustomer(kind, ticket, customerType, userId) {
+    if (!supabaseConfigured) return localSaveWalkInAsCustomer(kind, ticket, customerType)
+    return sbSaveWalkInAsCustomer(kind, ticket, customerType, userId)
+  },
+
   async deleteTicket(kind, id, isAdmin) {
     if (!isAdmin) throw new Error('Only an Admin can delete a ticket.')
     if (!supabaseConfigured) {
@@ -987,7 +1126,7 @@ export const store = {
       const customers = lsRead(LS_CUSTOMERS, [])
       const now = new Date().toISOString()
       const created = rows.map((r) => ({
-        id: uid(), company: r.Company, tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
+        id: uid(), company: r.Company, customer_type: 'Retail', tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
         payment_terms: r.Terms || 'Net 30', notes: '', po_requirements: '',
         version: 1, created_at: now, updated_at: now,
       }))
@@ -1000,6 +1139,7 @@ export const store = {
         .from('customers')
         .insert({
           company: r.Company,
+          customer_type: 'Retail',
           tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
           payment_terms: r.Terms || 'Net 30',
         })

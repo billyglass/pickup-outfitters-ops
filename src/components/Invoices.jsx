@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
+import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
@@ -19,6 +20,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const [voiding, setVoiding] = useState(null)
   const [voidReason, setVoidReason] = useState('')
   const [busy, setBusy] = useState('')
+  const [saveAs, setSaveAs] = useState(null) // walk-in invoice to save as a customer
+  const [msg, setMsg] = useState('')
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
   // Walk-in invoices show the buyer's name from the snapshot, with a tag.
@@ -113,10 +116,29 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
         products={data.products || []} profiles={data.profiles || []}
         user={user} profile={profile} isAdmin={isAdmin} settings={settings}
-        onSaved={async () => { setEditing(undefined); await onReload() }}
+        onSaved={async (saved, extra) => {
+          setEditing(undefined)
+          if (extra?.savedAsCustomer) {
+            setMsg(extra.linkedExisting
+              ? `Linked ${saved.number} to existing customer ${extra.savedAsCustomer.company} — same phone/email. Their history now includes this invoice.`
+              : `Saved ${extra.savedAsCustomer.company} as a customer and linked ${saved.number} to them.`)
+          }
+          await onReload()
+        }}
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
+      />
+    )
+  }
+
+  if (saveAs) {
+    return (
+      <SaveWalkInAsCustomer
+        kind="invoice" ticket={saveAs} data={data} user={user}
+        onDone={async (message) => { setSaveAs(null); setMsg(message); await onReload() }}
+        onError={onError}
+        onCancel={() => setSaveAs(null)}
       />
     )
   }
@@ -128,6 +150,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
       <p className="muted small">Numbers are assigned atomically on save (INV-… from 1001). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      {msg && <div className="success">{msg}</div>}
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>
           <h3 style={{ marginTop: 0 }}>Void invoice {voiding.number}?</h3>
@@ -144,7 +167,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
           <option value="walk-in">Walk-in (no customer record)</option>
-          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
         </select>
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
@@ -181,6 +204,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     <button className="btn secondary" onClick={() => setEditing(inv)}>Open</button>
                     <button className="btn secondary" onClick={() => setPrinting(inv)}>Print</button>
                     <button className="btn secondary" onClick={() => duplicate(inv)}>Duplicate</button>
+                    {isWalkInTicket(inv) && <button className="btn secondary" onClick={() => setSaveAs(inv)}>Save as customer</button>}
                     {inv.status === 'Draft' && <button className="btn secondary" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
                     {isAdmin && inv.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(inv)}>Delete</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (

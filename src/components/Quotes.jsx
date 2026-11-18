@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
+import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
 
@@ -17,6 +18,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const [outstandingOnly, setOutstandingOnly] = useState(true)
   const [busy, setBusy] = useState('')
   const [convertMsg, setConvertMsg] = useState('')
+  const [saveAs, setSaveAs] = useState(null) // walk-in quote to save as a customer
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
   // Walk-in quotes show the buyer's name from the snapshot, with a tag.
@@ -118,10 +120,29 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
         products={data.products || []} profiles={data.profiles || []}
         user={user} profile={profile} isAdmin={isAdmin} settings={settings}
-        onSaved={async () => { setEditing(undefined); await onReload() }}
+        onSaved={async (saved, extra) => {
+          setEditing(undefined)
+          if (extra?.savedAsCustomer) {
+            setConvertMsg(extra.linkedExisting
+              ? `Linked ${saved.number} to existing customer ${extra.savedAsCustomer.company} — same phone/email. Their history now includes this quote.`
+              : `Saved ${extra.savedAsCustomer.company} as a customer and linked ${saved.number} to them.`)
+          }
+          await onReload()
+        }}
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
+      />
+    )
+  }
+
+  if (saveAs) {
+    return (
+      <SaveWalkInAsCustomer
+        kind="quote" ticket={saveAs} data={data} user={user}
+        onDone={async (message) => { setSaveAs(null); setConvertMsg(message); await onReload() }}
+        onError={onError}
+        onCancel={() => setSaveAs(null)}
       />
     )
   }
@@ -139,7 +160,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
           <option value="walk-in">Walk-in (no customer record)</option>
-          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
         </select>
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
@@ -180,6 +201,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                     <button className="btn secondary" onClick={() => setEditing(q)}>Open</button>
                     <button className="btn secondary" onClick={() => setPrinting(q)}>Print</button>
                     <button className="btn secondary" onClick={() => duplicate(q)}>Duplicate</button>
+                    {isWalkInTicket(q) && <button className="btn secondary" onClick={() => setSaveAs(q)}>Save as customer</button>}
                     {q.status === 'Draft' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Sent')}>Send</button>}
                     {q.status === 'Sent' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Accepted')}>Accept</button>}
                     {['Draft', 'Sent'].includes(q.status) && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Declined')}>Decline</button>}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
+import { customerTypeOf } from './lib/tickets.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
@@ -44,6 +45,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
+  const [customerTypeFilter, setCustomerTypeFilter] = useState('') // '' = All, 'Retail', 'Fleet'
   const [vehicleFilter, setVehicleFilter] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   const [editingCustomer, setEditingCustomer] = useState(undefined) // undefined = list, null = new, object = edit
@@ -52,7 +54,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
-  const [searchFilters, setSearchFilters] = useState({ type: '', status: '', customerId: '', salespersonId: '', from: '', to: '' })
+  const [searchFilters, setSearchFilters] = useState({ type: '', status: '', customerId: '', customerType: '', salespersonId: '', from: '', to: '' })
   const [mfaQr, setMfaQr] = useState('')
   const [mfaFactorId, setMfaFactorId] = useState('')
   const [mfaCode, setMfaCode] = useState('')
@@ -194,8 +196,9 @@ export default function App() {
   }
 
   const customers = data.customers.filter((c) =>
-    !customerFilter.trim() ||
-    c.company.toLowerCase().includes(customerFilter.toLowerCase())
+    (!customerTypeFilter || customerTypeOf(c) === customerTypeFilter) &&
+    (!customerFilter.trim() ||
+    c.company.toLowerCase().includes(customerFilter.toLowerCase()))
   )
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
@@ -294,7 +297,12 @@ export default function App() {
               <select value={searchFilters.customerId} onChange={(e) => setSearchFilters({ ...searchFilters, customerId: e.target.value })}>
                 <option value="">Any customer</option>
                 <option value="walk-in">Walk-in (no customer record)</option>
-                {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+                {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
+              </select>
+              <select value={searchFilters.customerType} onChange={(e) => setSearchFilters({ ...searchFilters, customerType: e.target.value })}>
+                <option value="">Retail + Fleet</option>
+                <option value="Retail">Retail only</option>
+                <option value="Fleet">Fleet only</option>
               </select>
               <select value={searchFilters.salespersonId} onChange={(e) => setSearchFilters({ ...searchFilters, salespersonId: e.target.value })}>
                 <option value="">Any salesperson</option>
@@ -316,7 +324,7 @@ export default function App() {
             {searchResults.customers.length === 0 && <p className="muted">No customers matched.</p>}
             {searchResults.customers.map((c) => (
               <div key={c.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <span><strong>{c.company}</strong> · {c.payment_terms} {c.tax_exempt ? '· Tax exempt' : ''}</span>
+                <span><strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span> · {c.payment_terms} {c.tax_exempt ? '· Tax exempt' : ''}</span>
                 <button className="btn secondary" onClick={() => { setSelectedCustomerId(c.id); setTab('customers') }}>Open</button>
               </div>
             ))}
@@ -344,7 +352,7 @@ export default function App() {
             ) : selectedCustomer ? (
               <div className="card">
                 <div className="row-between">
-                  <h2 style={{ margin: 0 }}>{selectedCustomer.company}</h2>
+                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
                   <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
                 </div>
                 <p className="muted">
@@ -370,6 +378,19 @@ export default function App() {
                     <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
                   </div>
                 ))}
+                <h3>History — everything they've bought ({data.quotes.filter((q) => q.customer_id === selectedCustomer.id).length + data.invoices.filter((i) => i.customer_id === selectedCustomer.id).length})</h3>
+                {[...data.quotes.filter((q) => q.customer_id === selectedCustomer.id).map((q) => ({ type: 'Quote', t: q })),
+                  ...data.invoices.filter((i) => i.customer_id === selectedCustomer.id).map((i) => ({ type: 'Invoice', t: i }))]
+                  .sort((a, b) => String(b.t.issue_date || b.t.created_at || '').localeCompare(String(a.t.issue_date || a.t.created_at || '')))
+                  .map(({ type, t }) => (
+                    <div key={`${type}-${t.id}`} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                      <strong>{t.number}</strong> · {type} · {t.status} · {t.issue_date || (t.created_at || '').slice(0, 10)} · ${Number(t.total || 0).toFixed(2)}
+                      {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}
+                    </div>
+                  ))}
+                {data.quotes.filter((q) => q.customer_id === selectedCustomer.id).length + data.invoices.filter((i) => i.customer_id === selectedCustomer.id).length === 0 && (
+                  <p className="muted">No quotes or invoices for this customer yet.</p>
+                )}
                 <div className="row" style={{ marginTop: 16 }}>
                   <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
                   {isAdmin && <button className="btn danger" onClick={() => handleDeleteCustomer(selectedCustomer.id, selectedCustomer.company)}>Delete customer</button>}
@@ -382,12 +403,18 @@ export default function App() {
                   <button className="btn" onClick={() => setEditingCustomer(null)}>+ New customer</button>
                 </div>
                 <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter by company name…" style={{ marginTop: 12 }} />
+                <div className="row" style={{ marginTop: 12 }} role="group" aria-label="Customer type filter">
+                  <button type="button" className={customerTypeFilter === '' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('')}>All ({data.customers.length})</button>
+                  <button type="button" className={customerTypeFilter === 'Retail' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('Retail')}>Retail ({data.customers.filter((c) => customerTypeOf(c) === 'Retail').length})</button>
+                  <button type="button" className={customerTypeFilter === 'Fleet' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('Fleet')}>Fleet ({data.customers.filter((c) => customerTypeOf(c) === 'Fleet').length})</button>
+                </div>
                 <table>
-                  <thead><tr><th>Company</th><th>Terms</th><th>Tax</th><th>Vehicles</th><th></th></tr></thead>
+                  <thead><tr><th>Company</th><th>Type</th><th>Terms</th><th>Tax</th><th>Vehicles</th><th></th></tr></thead>
                   <tbody>
                     {customers.map((c) => (
                       <tr key={c.id}>
                         <td><strong>{c.company}</strong></td>
+                        <td><span className="pill">{customerTypeOf(c)}</span></td>
                         <td>{c.payment_terms}</td>
                         <td>{c.tax_exempt ? 'Exempt' : 'Taxable'}</td>
                         <td>{data.vehicles.filter((v) => v.customer_id === c.id).length}</td>
