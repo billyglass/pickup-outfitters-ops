@@ -210,7 +210,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
           )}
         </div>
       )}
-      <div className="row" style={{ marginTop: 12 }}>
+      <div className="row filters" style={{ marginTop: 12 }}>
         <div className="row" role="group" aria-label="Quote list">
           {VIEWS.map((v) => (
             <button key={v} type="button" className={view === v ? 'btn' : 'btn secondary'} onClick={() => setView(v)}>
@@ -235,8 +235,9 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
           <option value="60+">60+ days</option>
         </select>
       </div>
-      <table>
-        <thead><tr><th>Quote</th><th>Customer</th><th>Vehicle / VIN</th><th>Date</th><th>Age</th><th>Expires</th><th>Salesperson</th><th>Status</th><th>Total</th><th></th></tr></thead>
+      <div className="table-scroll">
+      <table className="list">
+        <thead><tr><th className="nowrap">Quote</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Date</th><th className="nowrap">Age</th><th className="nowrap">Expires</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th></th></tr></thead>
         <tbody>
           {filtered.map((q) => {
             const v = data.vehicles.find((x) => x.id === q.vehicle_id)
@@ -244,27 +245,27 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
             const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10))
             return (
               <tr key={q.id}>
-                <td><strong>{q.number}</strong></td>
-                <td>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
-                <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
-                <td>{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
-                <td>{age ?? '—'}d</td>
-                <td>{q.expires_on || '—'}</td>
-                <td>{nameOf(q.salesperson_id)}</td>
-                <td>{q.status}</td>
-                <td>${Number(q.total || 0).toFixed(2)}</td>
+                <td className="nowrap"><strong>{q.number}</strong></td>
+                <td className="customer" title={customerOf(q)}>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
+                <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small sub">VIN {vin}</div></td>
+                <td className="nowrap">{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
+                <td className="nowrap">{age ?? '—'}d</td>
+                <td className="nowrap">{q.expires_on || '—'}</td>
+                <td className="nowrap">{nameOf(q.salesperson_id)}</td>
+                <td className="nowrap">{q.status}</td>
+                <td className="num">${Number(q.total || 0).toFixed(2)}</td>
                 <td>
-                  <div className="row">
-                    <button className="btn secondary" onClick={() => setEditing(q)}>Open</button>
-                    <button className="btn secondary" onClick={() => setPrinting(q)}>Print</button>
-                    <button className="btn secondary" onClick={() => duplicate(q)}>Duplicate</button>
-                    {isWalkInTicket(q) && <button className="btn secondary" onClick={() => setSaveAs(q)}>Save as customer</button>}
-                    {q.status === 'Open' && <button className="btn secondary" disabled={busy === q.id} onClick={() => markLost(q)}>Mark lost</button>}
-                    {q.status === 'Lost' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Open')}>Reopen</button>}
+                  <div className="row actions">
+                    <button className="btn secondary small" onClick={() => setEditing(q)}>Open</button>
+                    <button className="btn secondary small" onClick={() => setPrinting(q)}>Print</button>
+                    <button className="btn secondary small" onClick={() => duplicate(q)}>Duplicate</button>
+                    {isWalkInTicket(q) && <button className="btn secondary small" onClick={() => setSaveAs(q)}>Save as customer</button>}
+                    {q.status === 'Open' && <button className="btn secondary small" disabled={busy === q.id} onClick={() => markLost(q)}>Mark lost</button>}
+                    {q.status === 'Lost' && <button className="btn secondary small" disabled={busy === q.id} onClick={() => setStatus(q, 'Open')}>Reopen</button>}
                     {canConvert(q) && (
-                      <button className="btn" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
+                      <button className="btn small" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
                     )}
-                    {isAdmin && q.status === 'Open' && <button className="btn danger" onClick={() => handleDelete(q)}>Delete</button>}
+                    {isAdmin && q.status === 'Open' && <button className="btn danger small" onClick={() => handleDelete(q)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -272,6 +273,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
           })}
         </tbody>
       </table>
+      </div>
       {filtered.length === 0 && <p className="muted">No quotes match these filters.</p>}
     </div>
   )

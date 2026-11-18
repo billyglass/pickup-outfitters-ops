@@ -171,7 +171,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
           </div>
         </div>
       )}
-      <div className="row" style={{ marginTop: 12 }}>
+      <div className="row filters" style={{ marginTop: 12 }}>
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
           <option value="walk-in">Walk-in (no customer record)</option>
@@ -189,8 +189,9 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="To date" />
         <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} /> Overdue only</label>
       </div>
-      <table>
-        <thead><tr><th>Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th>Issued</th><th>Due</th><th>Salesperson</th><th>Status</th><th>Total</th><th>Balance</th><th></th></tr></thead>
+      <div className="table-scroll">
+      <table className="list">
+        <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Issued</th><th className="nowrap">Due</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
         <tbody>
           {filtered.map((inv) => {
             const v = data.vehicles.find((x) => x.id === inv.vehicle_id)
@@ -198,25 +199,25 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             const overdue = isOverdue(inv)
             return (
               <tr key={inv.id}>
-                <td><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
-                <td>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
-                <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
-                <td>{inv.issue_date || (inv.created_at || '').slice(0, 10)}</td>
-                <td>{inv.due_date || '—'}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
-                <td>{nameOf(inv.salesperson_id)}</td>
-                <td>{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}</td>
-                <td>${Number(inv.total || 0).toFixed(2)}</td>
-                <td>${Number(inv.balance_due ?? inv.total ?? 0).toFixed(2)}</td>
+                <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
+                <td className="customer" title={customerOf(inv)}>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
+                <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small sub">VIN {vin}</div></td>
+                <td className="nowrap">{inv.issue_date || (inv.created_at || '').slice(0, 10)}</td>
+                <td className="nowrap">{inv.due_date || '—'}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
+                <td className="nowrap">{nameOf(inv.salesperson_id)}</td>
+                <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}</td>
+                <td className="num">${Number(inv.total || 0).toFixed(2)}</td>
+                <td className="num">${Number(inv.balance_due ?? inv.total ?? 0).toFixed(2)}</td>
                 <td>
-                  <div className="row">
-                    <button className="btn secondary" onClick={() => setEditing(inv)}>Open</button>
-                    <button className="btn secondary" onClick={() => setPrinting(inv)}>Print</button>
-                    <button className="btn secondary" onClick={() => duplicate(inv)}>Duplicate</button>
-                    {isWalkInTicket(inv) && <button className="btn secondary" onClick={() => setSaveAs(inv)}>Save as customer</button>}
-                    {inv.status === 'Draft' && <button className="btn secondary" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
-                    {isAdmin && inv.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(inv)}>Delete</button>}
+                  <div className="row actions">
+                    <button className="btn secondary small" onClick={() => setEditing(inv)}>Open</button>
+                    <button className="btn secondary small" onClick={() => setPrinting(inv)}>Print</button>
+                    <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
+                    {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
+                    {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
+                    {isAdmin && inv.status === 'Draft' && <button className="btn danger small" onClick={() => handleDelete(inv)}>Delete</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (
-                      <button className="btn danger" onClick={() => setVoiding(inv)}>Void…</button>
+                      <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}
                   </div>
                 </td>
@@ -225,6 +226,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
           })}
         </tbody>
       </table>
+      </div>
       {filtered.length === 0 && <p className="muted">No invoices match these filters.</p>}
     </div>
   )
