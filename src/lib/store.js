@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields } from './tickets.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -287,9 +287,103 @@ async function sbSyncLines(kind, parentId, lines) {
   }
 }
 
+// --- Vehicle upsert from a ticket -----------------------------------------
+// Vehicles are entered ON the quote/invoice, not beforehand: on ticket save
+// the ticket's VIN + YMM upserts the vehicles directory. If a record with
+// that VIN exists, link to it and fill in only non-blank ticket values
+// (blank fields never erase stored data); otherwise create the record for
+// the ticket's customer. No VIN on the ticket => no vehicle record.
+// Only allowed columns, never id: null — and vin_normalized is a generated
+// column, so it is never sent. RLS already lets any active user
+// insert/update vehicles, so Sales can do this from a ticket save.
+async function sbUpsertVehicleFromTicket(customerId, snapshot) {
+  const vin = normalizeVin(snapshot?.vin || snapshot?.vin_normalized || '')
+  if (!vin || !customerId) return null
+  const { data: rows, error } = await supabase
+    .from('vehicles')
+    .select('*')
+    .eq('vin_normalized', vin)
+  if (error) throw error
+  const fields = {
+    vin,
+    year: snapshot.year ?? '',
+    make: snapshot.make || '',
+    model: snapshot.model || '',
+    fleet_unit: snapshot.fleet_unit || '',
+    plate: snapshot.plate || '',
+  }
+  const decision = resolveVehicleUpsert(rows || [], customerId, fields)
+  if (decision.action === 'none' || decision.action === 'link') return decision.vehicle
+  if (decision.action === 'create') {
+    const { data, error: insErr } = await supabase.from('vehicles').insert(decision.payload).select().single()
+    if (insErr) throw insErr
+    return data
+  }
+  // update — plain update by id (no version predicate: this is a merge of
+  // ticket fields, not an edit of the vehicle form; the DB trigger bumps
+  // version and the audit trigger logs it).
+  const { data, error: updErr } = await supabase
+    .from('vehicles')
+    .update(decision.payload)
+    .eq('id', decision.vehicle.id)
+    .select()
+    .single()
+  if (updErr) throw updErr
+  return data
+}
+
+// Local-mode mirror of the upsert (same rules, localStorage vehicles).
+function localUpsertVehicleFromTicket(customerId, snapshot) {
+  const vin = normalizeVin(snapshot?.vin || snapshot?.vin_normalized || '')
+  if (!vin || !customerId) return null
+  const vehicles = lsRead(LS_VEHICLES, [])
+  const fields = {
+    vin,
+    year: snapshot.year ?? '',
+    make: snapshot.make || '',
+    model: snapshot.model || '',
+    fleet_unit: snapshot.fleet_unit || '',
+    plate: snapshot.plate || '',
+  }
+  const decision = resolveVehicleUpsert(vehicles, customerId, fields)
+  if (decision.action === 'none' || decision.action === 'link') return decision.vehicle
+  const now = new Date().toISOString()
+  if (decision.action === 'create') {
+    const saved = { ...decision.payload, id: uid(), vin_normalized: vin, version: 1, created_at: now, updated_at: now }
+    lsWrite(LS_VEHICLES, [saved, ...vehicles])
+    return saved
+  }
+  const idx = vehicles.findIndex((v) => v.id === decision.vehicle.id)
+  const saved = { ...vehicles[idx], ...decision.payload, version: (vehicles[idx].version || 1) + 1, updated_at: now }
+  vehicles[idx] = saved
+  lsWrite(LS_VEHICLES, vehicles)
+  return saved
+}
+
 async function sbSaveTicket(kind, ticket, lines, userId) {
   const table = ticketTable(kind)
   const totals = computeTotals(lines, ticket.tax_rate)
+  // Vehicle upsert from the ticket's own VIN/YMM fields. For a NEW ticket
+  // this runs before the insert; for an EXISTING ticket it runs after the
+  // version check below (so a conflicting save never creates/updates a
+  // vehicle record). The snapshot's vehicle_id is set to the linked record.
+  let vehicle = null
+  const upsertAndLink = async (header) => {
+    vehicle = await sbUpsertVehicleFromTicket(ticket.customer_id, ticket.vehicle_snapshot)
+    header.vehicle_id = vehicle?.id || ticket.vehicle_id || null
+    header.vehicle_snapshot = vehicleSnapshotFromFields(
+      {
+        vin: ticket.vehicle_snapshot?.vin || '',
+        year: ticket.vehicle_snapshot?.year ?? '',
+        make: ticket.vehicle_snapshot?.make || '',
+        model: ticket.vehicle_snapshot?.model || '',
+        fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
+        plate: ticket.vehicle_snapshot?.plate || '',
+      },
+      header.vehicle_id
+    ) || header.vehicle_snapshot
+    return header
+  }
   const header = {
     customer_id: ticket.customer_id,
     vehicle_id: ticket.vehicle_id || null,
@@ -317,7 +411,9 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
     if (ticket.idempotency_key) header.idempotency_key = ticket.idempotency_key
   }
   if (!ticket.id) {
-    // New ticket: allocate the number atomically on the server first.
+    // New ticket: upsert the vehicle from the ticket, then allocate the
+    // number atomically on the server.
+    await upsertAndLink(header)
     const number = await sbNextNumber(kind)
     const { data, error } = await supabase
       .from(table)
@@ -350,7 +446,7 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
   }
   const { data, error } = await supabase
     .from(table)
-    .update(header)
+    .update(await upsertAndLink(header))
     .eq('id', ticket.id)
     .eq('version', ticket.version)
     .select()
@@ -390,6 +486,22 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
   const issueDate = todayStr()
   const totals = computeTotals(quoteLines, state.settings?.tax_rate)
   const number = await sbNextNumber('invoice')
+  // The vehicle comes from the quote's ticket fields: upsert it into the
+  // Vehicles directory and link the new invoice to that record.
+  const convertedVehicle = await sbUpsertVehicleFromTicket(quote.customer_id, quote.vehicle_snapshot)
+  const convertedSnapshot = convertedVehicle
+    ? vehicleSnapshotFromFields(
+        {
+          vin: quote.vehicle_snapshot?.vin || '',
+          year: quote.vehicle_snapshot?.year ?? '',
+          make: quote.vehicle_snapshot?.make || '',
+          model: quote.vehicle_snapshot?.model || '',
+          fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
+          plate: quote.vehicle_snapshot?.plate || '',
+        },
+        convertedVehicle.id
+      ) || quote.vehicle_snapshot
+    : quote.vehicle_snapshot
   const { data: invoice, error } = await supabase
     .from('invoices')
     .insert({
@@ -397,7 +509,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       idempotency_key: idempotencyKey,
       quote_id: quote.id,
       customer_id: quote.customer_id,
-      vehicle_id: quote.vehicle_id || null,
+      vehicle_id: convertedVehicle?.id || quote.vehicle_id || null,
       salesperson_id: quote.salesperson_id || userId,
       created_by: userId,
       status: 'Draft',
@@ -408,7 +520,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       customer_notes: quote.customer_notes || null,
       internal_notes: quote.internal_notes || null,
       customer_snapshot: quote.customer_snapshot || null,
-      vehicle_snapshot: quote.vehicle_snapshot || null,
+      vehicle_snapshot: convertedSnapshot || null,
       subtotal: totals.subtotal,
       tax_total: totals.taxTotal,
       total: totals.total,
@@ -486,8 +598,24 @@ function localSaveTicket(kind, ticket, lines, userId) {
   const key = kind === 'quote' ? LS_QUOTES : LS_INVOICES
   const rows = lsRead(key, [])
   const totals = computeTotals(lines, ticket.tax_rate)
+  // Vehicle upsert from the ticket's own VIN/YMM, same as Supabase mode.
+  const localVehicle = localUpsertVehicleFromTicket(ticket.customer_id, ticket.vehicle_snapshot)
   const saved = {
     ...ticket,
+    vehicle_id: localVehicle?.id || ticket.vehicle_id || null,
+    vehicle_snapshot: localVehicle
+      ? vehicleSnapshotFromFields(
+          {
+            vin: ticket.vehicle_snapshot?.vin || '',
+            year: ticket.vehicle_snapshot?.year ?? '',
+            make: ticket.vehicle_snapshot?.make || '',
+            model: ticket.vehicle_snapshot?.model || '',
+            fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
+            plate: ticket.vehicle_snapshot?.plate || '',
+          },
+          localVehicle.id
+        ) || ticket.vehicle_snapshot
+      : ticket.vehicle_snapshot,
     lines: (lines || []).map((l, i) => ({ ...l, id: l.id || uid(), line_total: lineTotal(l), sort_order: i })),
     subtotal: totals.subtotal,
     tax_total: totals.taxTotal,
@@ -763,14 +891,28 @@ export const store = {
       }
       const issueDate = todayStr()
       const totals = computeTotals(quoteLines, state.settings?.tax_rate)
+      const localVehicle = localUpsertVehicleFromTicket(quote.customer_id, quote.vehicle_snapshot)
+      const localSnapshot = localVehicle
+        ? vehicleSnapshotFromFields(
+            {
+              vin: quote.vehicle_snapshot?.vin || '',
+              year: quote.vehicle_snapshot?.year ?? '',
+              make: quote.vehicle_snapshot?.make || '',
+              model: quote.vehicle_snapshot?.model || '',
+              fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
+              plate: quote.vehicle_snapshot?.plate || '',
+            },
+            localVehicle.id
+          ) || quote.vehicle_snapshot
+        : quote.vehicle_snapshot
       const invoice = {
         id: uid(), number: `INV-${1001 + lsRead(LS_INVOICES, []).length}`,
-        quote_id: quote.id, customer_id: quote.customer_id, vehicle_id: quote.vehicle_id || null,
+        quote_id: quote.id, customer_id: quote.customer_id, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
         salesperson_id: quote.salesperson_id || userId, created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'Net 30',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,
-        customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: quote.vehicle_snapshot || null,
+        customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: localSnapshot || null,
         subtotal: totals.subtotal, tax_total: totals.taxTotal, total: totals.total, balance_due: totals.total,
         version: 1, created_at: new Date().toISOString(),
         lines: (quoteLines || []).map((l, i) => ({ ...l, id: uid(), line_total: lineTotal(l), sort_order: i })),

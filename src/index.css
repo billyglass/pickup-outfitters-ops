@@ -62,7 +62,11 @@ tr:hover td { background: #fafafa; }
 .warn { background: #fff3cd; color: #664d03; border: 1px solid #ffecb5; padding: 10px 12px; border-radius: 6px; margin: 12px 0; }
 .success { background: #e6f4ea; color: var(--green); border: 1px solid #a3d9a5; padding: 10px 12px; border-radius: 6px; margin: 12px 0; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .container { padding: 12px; } }
+/* Vehicle section on a ticket: VIN + Year/Make/Model on one line, then
+   Fleet/Unit + Plate on the next. */
+.vehicle-row { display: grid; grid-template-columns: 2.4fr 0.7fr 1fr 1fr; gap: 0 12px; }
+.vehicle-row-2 { grid-template-columns: 1fr 1fr; }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row, .vehicle-row-2 { grid-template-columns: 1fr; } .container { padding: 12px; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, plain black-and-white, no backgrounds --- */
 .print-sheet { max-width: 800px; margin: 0 auto; }

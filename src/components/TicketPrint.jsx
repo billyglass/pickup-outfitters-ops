@@ -1,4 +1,4 @@
-import { money, computeTotals, vehicleLabel } from '../lib/tickets.js'
+import { money, computeTotals } from '../lib/tickets.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
@@ -7,8 +7,8 @@ import { money, computeTotals, vehicleLabel } from '../lib/tickets.js'
 // SALESPERSON / P.O. NUMBER / VEHICLE / TERMS
 // Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / TAXABLE / AMOUNT
 // NOTES — SUBTOTAL / TAX RATE / TAX / LABOR / TOTAL — "Thank You For Your Business"
-// Plain black-and-white, no background colours. VIN is added as its own
-// line under Vehicle — the template has no explicit VIN field.
+// Plain black-and-white, no background colours. VIN and Year/Make/Model
+// print on the SAME line, matching the ticket's Vehicle section.
 export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose }) {
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? 0.0774)
@@ -16,10 +16,17 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   const snapCustomer = ticket.customer_snapshot || {}
   const snapVehicle = ticket.vehicle_snapshot || {}
   const vin = snapVehicle.vin || vehicle?.vin || ''
-  const vehicleText = [
-    vehicle ? vehicleLabel(vehicle) : snapVehicle ? [snapVehicle.year, snapVehicle.make, snapVehicle.model].filter(Boolean).join(' ') : '',
-    snapVehicle.fleet_unit || vehicle?.fleet_unit ? `Unit ${snapVehicle.fleet_unit || vehicle?.fleet_unit}` : '',
+  const ymm = [snapVehicle.year ?? vehicle?.year, snapVehicle.make || vehicle?.make, snapVehicle.model || vehicle?.model].filter(Boolean).join(' ')
+  const unit = snapVehicle.fleet_unit || vehicle?.fleet_unit || ''
+  const plate = snapVehicle.plate || vehicle?.plate || ''
+  // VIN and Year/Make/Model on the SAME line, as on the ticket.
+  const vehicleLine = [
+    vin ? `VIN: ${vin}` : '',
+    ymm || '',
+    unit ? `Unit ${unit}` : '',
+    plate ? `Plate ${plate}` : '',
   ].filter(Boolean).join(' · ')
+  const vehicleText = ymm || '—'
   const contactName = snapCustomer.contact_name || ''
   const company = snapCustomer.company || customer?.company || ''
   const address = snapCustomer.address || ''
@@ -74,7 +81,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
             <td>{ticket.payment_terms || '—'}</td>
           </tr></tbody>
         </table>
-        <div className="print-vin"><strong>VIN:</strong> {vin || '—'}</div>
+        <div className="print-vin">{vehicleLine || 'Vehicle: —'}</div>
 
         <table className="print-lines">
           <thead><tr><th>Quantity</th><th>Description</th><th>Part Number</th><th>Unit Price</th><th>Taxable</th><th>Amount</th></tr></thead>

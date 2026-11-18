@@ -129,6 +129,126 @@ export function vehicleSnapshot(vehicle, vinOverride) {
   }
 }
 
+// --- Vehicle entry lives ON the ticket -------------------------------------
+// Bill's rule (Nov 18): a vehicle is entered on the quote/invoice itself —
+// VIN + Year/Make/Model on one line, Fleet/Unit + Plate on the next — and
+// the Vehicles tab is populated FROM tickets, not filled in first.
+// The ticket's vehicle fields are the source of truth for the snapshot;
+// the vehicles table is the directory the ticket feeds.
+
+export function emptyVehicleFields() {
+  return { vin: '', year: '', make: '', model: '', fleet_unit: '', plate: '' }
+}
+
+// Fields for the ticket's Vehicle section: snapshot first (frozen ticket
+// values win), then the linked vehicle record as a fallback for older
+// tickets whose snapshot is missing YMM.
+export function vehicleFieldsFromSnapshot(snapshot, vehicle) {
+  const s = snapshot || {}
+  return {
+    vin: s.vin || vehicle?.vin || '',
+    year: s.year ?? vehicle?.year ?? '',
+    make: s.make || vehicle?.make || '',
+    model: s.model || vehicle?.model || '',
+    fleet_unit: s.fleet_unit || vehicle?.fleet_unit || '',
+    plate: s.plate || vehicle?.plate || '',
+  }
+}
+
+// Snapshot built from the ticket's own vehicle fields (not from a picked
+// vehicle record). Issued tickets are still frozen — because these fields
+// ARE the ticket, editing them on the ticket is what changes the snapshot.
+export function vehicleSnapshotFromFields(fields, vehicleId) {
+  const f = fields || {}
+  const vin = normalizeVin(f.vin || '')
+  if (!vin && !f.year && !f.make && !f.model && !f.fleet_unit && !f.plate) return null
+  return {
+    vehicle_id: vehicleId || null,
+    year: f.year ? Number(f.year) : null,
+    make: (f.make || '').trim() || null,
+    model: (f.model || '').trim() || null,
+    fleet_unit: (f.fleet_unit || '').trim() || null,
+    plate: (f.plate || '').trim() || null,
+    vin: vin || null,
+    vin_normalized: vin || null,
+    vin_differs_from_record: false,
+  }
+}
+
+// Find the vehicle record for a VIN. Prefer one belonging to this customer
+// (a VIN can legitimately exist under another customer — warn, don't block).
+export function findVehicleByVin(vehicles, vin, customerId) {
+  const n = normalizeVin(vin)
+  if (!n) return null
+  const matches = (vehicles || []).filter((v) => normalizeVin(v.vin) === n)
+  if (!matches.length) return null
+  return matches.find((v) => v.customer_id === customerId) || matches[0]
+}
+
+// Merge ticket fields into a stored vehicle record: non-blank ticket values
+// overwrite, blank ticket fields NEVER blank out stored values.
+export function mergeVehicleFields(existing, incoming) {
+  const next = { ...(existing || {}) }
+  const take = (key, asNumber) => {
+    const v = incoming?.[key]
+    if (v === undefined || v === null || String(v).trim() === '') return
+    next[key] = asNumber ? Number(v) : String(v).trim()
+  }
+  take('vin')
+  take('year', true)
+  take('make')
+  take('model')
+  take('fleet_unit')
+  take('plate')
+  return next
+}
+
+// Pure upsert decision, given the vehicles already on file and the ticket's
+// vehicle fields. Returns { action, vehicle, payload }:
+//  - 'none'   — no VIN on the ticket, nothing to upsert.
+//  - 'link'   — a record with this VIN exists and already holds everything
+//               the ticket has (no stored values change); just link to it.
+//  - 'update' — the record exists; the ticket adds/corrects YMM/unit/plate.
+//  - 'create' — no record with this VIN; insert one for this customer.
+// The store layer performs the DB call; this function is unit-testable.
+export function resolveVehicleUpsert(vehicles, customerId, fields) {
+  const vin = normalizeVin(fields?.vin || '')
+  if (!vin) return { action: 'none', vehicle: null, payload: null }
+  const existing = findVehicleByVin(vehicles, vin, customerId)
+  if (!existing) {
+    return {
+      action: 'create',
+      vehicle: null,
+      payload: {
+        customer_id: customerId,
+        vin,
+        year: fields.year ? Number(fields.year) : null,
+        make: (fields.make || '').trim() || null,
+        model: (fields.model || '').trim() || null,
+        fleet_unit: (fields.fleet_unit || '').trim() || null,
+        plate: (fields.plate || '').trim() || null,
+      },
+    }
+  }
+  const merged = mergeVehicleFields(existing, { ...fields, vin })
+  const changed = ['year', 'make', 'model', 'fleet_unit', 'plate'].some(
+    (k) => (merged[k] ?? null) !== (existing[k] ?? null)
+  )
+  return {
+    action: changed ? 'update' : 'link',
+    vehicle: existing,
+    payload: changed
+      ? {
+          year: merged.year ?? null,
+          make: merged.make || null,
+          model: merged.model || null,
+          fleet_unit: merged.fleet_unit || null,
+          plate: merged.plate || null,
+        }
+      : null,
+  }
+}
+
 export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   // Fleet duplicate: build a NEW Draft ticket prefilled from a source ticket.
   // Pure function — nothing is saved here. The caller opens TicketForm with

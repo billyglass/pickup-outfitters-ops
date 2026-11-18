@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
 import { normalizeVin } from '../lib/csv.js'
 import {
   computeTotals, money, lineTotal, emptyLine, addDays, todayStr,
-  dueDateFor, termsDays, customerSnapshot, vehicleSnapshot, vehicleLabel,
+  dueDateFor, termsDays, customerSnapshot,
+  vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -41,18 +42,45 @@ export default function TicketForm({
   const [lines, setLines] = useState(() =>
     (initialLines?.length ? initialLines : [emptyLine()]).map((l) => ({ ...l }))
   )
-  const [vinOverride, setVinOverride] = useState(
-    initial?.vehicle_snapshot?.vin || prefill?.vehicle_snapshot?.vin || ''
-  )
+  // Vehicle is entered ON the ticket — VIN + Year/Make/Model on one line,
+  // Fleet/Unit + Plate on the next. No separate vehicle step: on save the
+  // ticket's VIN/YMM upserts the Vehicles directory (see store.saveTicket).
+  // Initial fields come from the ticket snapshot first, then the linked
+  // vehicle record (older tickets whose snapshot lacks YMM).
+  const [veh, setVeh] = useState(() => {
+    const src = initial || prefill
+    const linked = src?.vehicle_id ? vehicles.find((v) => v.id === src.vehicle_id) : null
+    return vehicleFieldsFromSnapshot(src?.vehicle_snapshot || null, linked)
+  })
   const [status, setStatus] = useState('saved')
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
 
   const customer = customers.find((c) => c.id === ticket.customer_id) || null
-  const customerVehicles = vehicles.filter((v) => v.customer_id === ticket.customer_id)
-  const vehicle = vehicles.find((v) => v.id === ticket.vehicle_id) || null
-  const vinDiffers = !!(vehicle?.vin && vinOverride && normalizeVin(vinOverride) !== normalizeVin(vehicle.vin))
+  const vinNorm = normalizeVin(veh.vin)
+  // A VIN already on file (prefer this customer's record) auto-fills the
+  // YMM/unit/plate fields — blank ones only, never overwriting what was typed.
+  const vinMatch = useMemo(
+    () => findVehicleByVin(vehicles, veh.vin, ticket.customer_id),
+    [vehicles, veh.vin, ticket.customer_id] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const vinMatchOtherCustomer = !!(vinMatch && ticket.customer_id && vinMatch.customer_id !== ticket.customer_id)
+  const lastAutofillVin = useRef('')
+  useEffect(() => {
+    if (!vinMatch || vinNorm === lastAutofillVin.current) return
+    lastAutofillVin.current = vinNorm
+    setVeh((v) => ({
+      ...v,
+      year: v.year || vinMatch.year || '',
+      make: v.make || vinMatch.make || '',
+      model: v.model || vinMatch.model || '',
+      fleet_unit: v.fleet_unit || vinMatch.fleet_unit || '',
+      plate: v.plate || vinMatch.plate || '',
+    }))
+    setTicket((t) => (t.vehicle_id === vinMatch.id ? t : { ...t, vehicle_id: vinMatch.id }))
+    setStatus('unsaved')
+  }, [vinMatch, vinNorm]) // eslint-disable-line react-hooks/exhaustive-deps
   const totals = useMemo(() => computeTotals(lines, taxRate), [lines, taxRate])
   const filteredCustomers = customers.filter((c) =>
     !customerFilter.trim() || c.company.toLowerCase().includes(customerFilter.toLowerCase())
@@ -112,9 +140,10 @@ export default function TicketForm({
       const snapCustomer = initial && initial.status !== 'Draft'
         ? initial.customer_snapshot
         : customerSnapshot(customer, contacts, addresses)
-      const snapVehicle = initial && initial.status !== 'Draft'
-        ? initial.vehicle_snapshot
-        : vehicleSnapshot(vehicle, vinOverride || vehicle?.vin || '')
+      // The vehicle snapshot is ALWAYS built from this ticket's own vehicle
+      // fields — these fields are the ticket, so editing them here is what
+      // changes the snapshot (and, on save, upserts the Vehicles directory).
+      const snapVehicle = vehicleSnapshotFromFields(veh, ticket.vehicle_id || vinMatch?.id || null)
       const saved = await store.saveTicket(
         kind,
         { ...ticket, tax_rate: taxRate, customer_snapshot: snapCustomer, vehicle_snapshot: snapVehicle },
@@ -148,7 +177,7 @@ export default function TicketForm({
       {prefill && (
         <div className="warn">
           <strong>Duplicated from {prefill.sourceLabel}.</strong> Everything is copied — customer, lines, notes, terms, PO.
-          Change the vehicle / VIN below for this fleet unit, then Save. A new number is assigned on save; the original {isQuote ? 'quote' : 'invoice'} is unchanged.
+          Change the VIN and Year/Make/Model below for this fleet unit, then Save. A new number is assigned on save; the original {isQuote ? 'quote' : 'invoice'} is unchanged.
         </div>
       )}
       {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
@@ -158,30 +187,59 @@ export default function TicketForm({
         <div>
           <label>Customer *</label>
           <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter customers…" disabled={readOnly} />
-          <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value, vehicle_id: '' })}>
+          <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value })}>
             <option value="">— Choose customer —</option>
             {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
           </select>
           {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
         </div>
-        <div style={prefill ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
-          <label>Vehicle {prefill && '— change this for the fleet unit'}</label>
-          <select value={ticket.vehicle_id || ''} disabled={readOnly || !ticket.customer_id} autoFocus={!!prefill} onChange={(e) => { patch({ vehicle_id: e.target.value }); const v = vehicles.find((x) => x.id === e.target.value); setVinOverride(v?.vin || '') }}>
-            <option value="">— No vehicle —</option>
-            {customerVehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}{v.fleet_unit ? ` · Unit ${v.fleet_unit}` : ''}{v.plate ? ` · ${v.plate}` : ''}</option>)}
-          </select>
-          {vehicle && <p className="muted small">{vehicleLabel(vehicle)} · Unit {vehicle.fleet_unit || '—'} · Plate {vehicle.plate || '—'}</p>}
-          {prefill && <p className="muted small">Change the vehicle / VIN for this fleet unit — everything else is copied.</p>}
-        </div>
       </div>
 
-      <div>
-        <label>VIN (on this ticket)</label>
-        <input value={vinOverride} disabled={readOnly} onChange={(e) => setVinOverride(e.target.value.toUpperCase())} placeholder="Auto-filled from the vehicle — edit only if this ticket's VIN differs" />
-        {vinDiffers && <div className="warn">This VIN differs from the vehicle record ({vehicle.vin}). It is saved only on this ticket as a snapshot override — the vehicle record is not changed.</div>}
-        {!vehicle && <p className="muted small">Pick a vehicle to auto-fill the VIN, or type it here.</p>}
-        {prefill && vehicle && <p className="muted small">VIN auto-fills from the vehicle you pick — change the vehicle above and the VIN follows.</p>}
+      <h3>Vehicle</h3>
+      <div className="vehicle-row" style={prefill ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
+        <div>
+          <label>VIN</label>
+          <input
+            value={veh.vin || ''} disabled={readOnly} autoFocus={!!prefill} autoComplete="off"
+            placeholder="Type the full VIN — Year/Make/Model fill in if it's already on file"
+            onChange={(e) => {
+              const v = normalizeVin(e.target.value)
+              setVeh((prev) => ({ ...prev, vin: v }))
+              if (!findVehicleByVin(vehicles, v, ticket.customer_id)) {
+                setTicket((t) => (t.vehicle_id ? { ...t, vehicle_id: '' } : t))
+              }
+              setStatus('unsaved')
+            }}
+          />
+        </div>
+        <div>
+          <label>Year</label>
+          <input type="number" min="1900" max="2100" value={veh.year ?? ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, year: e.target.value })); setStatus('unsaved') }} />
+        </div>
+        <div>
+          <label>Make</label>
+          <input value={veh.make || ''} disabled={readOnly} placeholder="Ford" onChange={(e) => { setVeh((v) => ({ ...v, make: e.target.value })); setStatus('unsaved') }} />
+        </div>
+        <div>
+          <label>Model</label>
+          <input value={veh.model || ''} disabled={readOnly} placeholder="F-250" onChange={(e) => { setVeh((v) => ({ ...v, model: e.target.value })); setStatus('unsaved') }} />
+        </div>
       </div>
+      <div className="vehicle-row vehicle-row-2">
+        <div>
+          <label>Fleet / unit number (optional)</label>
+          <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
+        </div>
+        <div>
+          <label>License plate (optional)</label>
+          <input value={veh.plate || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, plate: e.target.value })); setStatus('unsaved') }} />
+        </div>
+      </div>
+      {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
+      {vinMatchOtherCustomer && <div className="warn">This VIN is already on file under a different customer ({vinMatch.year || ''} {vinMatch.make || ''} {vinMatch.model || ''}). You can still save — check it's not a typo or the wrong customer.</div>}
+      {vinNorm && vinNorm.length !== 17 && <div className="warn">This VIN is {vinNorm.length} characters — a full VIN is 17. Check for a typo. You can still save.</div>}
+      {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}
+      {prefill && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
 
       <div className="form-grid">
         <div>

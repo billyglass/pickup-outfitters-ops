@@ -371,7 +371,6 @@ export default function App() {
                 ))}
                 <div className="row" style={{ marginTop: 16 }}>
                   <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
-                  <button className="btn secondary" onClick={() => { setPreselectedCustomerId(selectedCustomer.id); setEditingVehicle(null); setTab('vehicles') }}>+ Add vehicle</button>
                   {isAdmin && <button className="btn danger" onClick={() => handleDeleteCustomer(selectedCustomer.id, selectedCustomer.company)}>Delete customer</button>}
                 </div>
               </div>
@@ -404,7 +403,7 @@ export default function App() {
 
         {tab === 'vehicles' && (
           <>
-            {editingVehicle !== undefined ? (
+            {editingVehicle ? (
               <VehicleForm
                 key={editingVehicle?.id || `new-${preselectedCustomerId}`}
                 initial={editingVehicle}
@@ -417,8 +416,8 @@ export default function App() {
               <div className="card">
                 <div className="row-between">
                   <h2 style={{ margin: 0 }}>Vehicles ({vehicles.length})</h2>
-                  <button className="btn" onClick={() => { setPreselectedCustomerId(''); setEditingVehicle(null) }}>+ New vehicle</button>
                 </div>
+                <p className="muted">Vehicles are created automatically from quotes and invoices — enter the VIN and Year/Make/Model on the ticket and it shows up here. Use Edit below to correct a typo on a vehicle record.</p>
                 <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Filter by VIN, fleet/unit, plate, make…" style={{ marginTop: 12 }} />
                 <table>
                   <thead><tr><th>Vehicle</th><th>VIN</th><th>Fleet / unit</th><th>Plate</th><th>Customer</th><th></th></tr></thead>
@@ -438,7 +437,7 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
-                {vehicles.length === 0 && <p className="muted">No vehicles yet.</p>}
+                {vehicles.length === 0 && <p className="muted">No vehicles yet — create a quote or invoice and enter the VIN and Year/Make/Model on the ticket, and the vehicle will appear here.</p>}
               </div>
             )}
           </>
