@@ -263,7 +263,10 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   const label = `${kind === 'quote' ? 'QT-' : 'INV-'}${source.number}`
   const sourceNote = `Duplicated from ${label} on ${issue}`
   const ticket = {
-    customer_id: source.customer_id,
+    customer_id: source.customer_id || null,
+    // The snapshot MUST carry over: for a walk-in ticket it IS the customer
+    // (name + phone live nowhere else), so dropping it would lose the buyer.
+    customer_snapshot: source.customer_snapshot || null,
     vehicle_id: source.vehicle_id || '',
     vehicle_snapshot: source.vehicle_snapshot || null,
     salesperson_id: userId || source.salesperson_id || '',
@@ -300,6 +303,42 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
       sort_order: i,
     }))
   return { ticket, lines, sourceLabel: label }
+}
+
+// --- Walk-in / one-off tickets ------------------------------------------------
+// Bill's rule (Nov 18): a quick invoice/quote for a small one-off purchase
+// must NOT require creating a customer record. The ticket just carries a
+// name + phone (+ optional email) in its customer_snapshot, with
+// customer_id = null. No fake "Walk-in Customer" record is ever created —
+// a null customer_id with a walk-in snapshot is the honest representation,
+// and the ticket is self-contained (it prints and searches correctly with
+// no customer record behind it).
+export function walkInCustomerSnapshot(name, phone, email) {
+  return {
+    walk_in: true,
+    company: null,
+    contact_name: (name || '').trim() || null,
+    phone: (phone || '').trim() || null,
+    email: (email || '').trim() || null,
+    address: null,
+    payment_terms: null,
+    tax_exempt: false,
+  }
+}
+
+export function isWalkInTicket(ticket) {
+  return !ticket?.customer_id && !!ticket?.customer_snapshot?.walk_in
+}
+
+// Display name for a ticket's customer: the walk-in name for walk-ins, the
+// customer record's company otherwise. Never crashes on a null customer_id.
+export function ticketCustomerName(ticket, customers) {
+  if (!ticket) return '—'
+  if (isWalkInTicket(ticket)) {
+    return ticket.customer_snapshot.contact_name || ticket.customer_snapshot.company || 'Walk-in'
+  }
+  if (!ticket.customer_id) return '—'
+  return (customers || []).find((c) => c.id === ticket.customer_id)?.company || '—'
 }
 
 export function vehicleLabel(vehicle) {

@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket } from './tickets.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -169,7 +169,7 @@ async function sbSaveVehicle(vehicle) {
     const { data, error } = await supabase
       .from('vehicles')
       .update({
-        customer_id: vehicle.customer_id,
+        customer_id: vehicle.customer_id || null,
         vin: vehicle.vin || null,
         year: vehicle.year || null,
         make: vehicle.make || null,
@@ -189,7 +189,7 @@ async function sbSaveVehicle(vehicle) {
   const { data, error } = await supabase
     .from('vehicles')
     .insert({
-      customer_id: vehicle.customer_id,
+      customer_id: vehicle.customer_id || null,
       vin: vehicle.vin || null,
       year: vehicle.year || null,
       make: vehicle.make || null,
@@ -298,7 +298,9 @@ async function sbSyncLines(kind, parentId, lines) {
 // insert/update vehicles, so Sales can do this from a ticket save.
 async function sbUpsertVehicleFromTicket(customerId, snapshot) {
   const vin = normalizeVin(snapshot?.vin || snapshot?.vin_normalized || '')
-  if (!vin || !customerId) return null
+  // customerId may be null for a walk-in ticket — the vehicle is still
+  // created, with customer_id null (migration 003). No VIN => no record.
+  if (!vin) return null
   const { data: rows, error } = await supabase
     .from('vehicles')
     .select('*')
@@ -335,7 +337,8 @@ async function sbUpsertVehicleFromTicket(customerId, snapshot) {
 // Local-mode mirror of the upsert (same rules, localStorage vehicles).
 function localUpsertVehicleFromTicket(customerId, snapshot) {
   const vin = normalizeVin(snapshot?.vin || snapshot?.vin_normalized || '')
-  if (!vin || !customerId) return null
+  // customerId may be null for a walk-in ticket — same rule as Supabase mode.
+  if (!vin) return null
   const vehicles = lsRead(LS_VEHICLES, [])
   const fields = {
     vin,
@@ -385,7 +388,7 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
     return header
   }
   const header = {
-    customer_id: ticket.customer_id,
+    customer_id: ticket.customer_id || null, // null = walk-in ticket
     vehicle_id: ticket.vehicle_id || null,
     salesperson_id: ticket.salesperson_id || userId,
     status: ticket.status,
@@ -508,7 +511,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       number,
       idempotency_key: idempotencyKey,
       quote_id: quote.id,
-      customer_id: quote.customer_id,
+      customer_id: quote.customer_id || null, // null = walk-in quote converts to a walk-in invoice
       vehicle_id: convertedVehicle?.id || quote.vehicle_id || null,
       salesperson_id: quote.salesperson_id || userId,
       created_by: userId,
@@ -665,10 +668,19 @@ export async function globalSearch(query, state, filters = {}) {
     if (!n || !vin) return false
     return n.includes(vin) || (vinTail6 && n.endsWith(vinTail6)) || (vinTail8 && n.endsWith(vinTail8))
   }
-  const customerName = (id) => state.customers.find((c) => c.id === id)?.company || '—'
+  // Walk-in tickets have no customer record — their name lives in the
+  // snapshot, so the display name comes from the ticket itself.
+  const customerName = (t) => ticketCustomerName(t, state.customers)
   const vehicleFor = (id) => state.vehicles.find((v) => v.id === id) || null
   const ticketVin = (t) => t.vehicle_snapshot?.vin || vehicleFor(t.vehicle_id)?.vin || ''
   const salespersonName = (id) => state.profiles?.find((p) => p.id === id)?.name || ''
+  // Does the query match a walk-in ticket's snapshot name / phone?
+  const walkInMatches = (t) => {
+    if (!isWalkInTicket(t) || !lower) return false
+    const s = t.customer_snapshot || {}
+    return [s.contact_name, s.company, s.phone, s.email]
+      .some((f) => String(f || '').toLowerCase().includes(lower))
+  }
 
   // Local mode: everything is already in state — filter it the same way.
   if (!supabaseConfigured) {
@@ -679,16 +691,18 @@ export async function globalSearch(query, state, filters = {}) {
       String(v.plate || '').toLowerCase().includes(lower)
     )
     const tickets = []
-    const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t.customer_id), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
+    const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
     for (const t of state.quotes) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('quote', t, 'VIN')
+      else if (walkInMatches(t)) pushTicket('quote', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('quote', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower)) pushTicket('quote', t, 'Number / PO')
     }
     for (const t of state.invoices) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('invoice', t, 'VIN')
+      else if (walkInMatches(t)) pushTicket('invoice', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('invoice', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower) || (t.previous_numbers || []).some((n) => String(n).toLowerCase().includes(lower))) pushTicket('invoice', t, 'Number / PO')
     }
@@ -720,7 +734,7 @@ export async function globalSearch(query, state, filters = {}) {
   const pushTicket = (type, t, match) => {
     if (!t || ticketById.has(`${type}:${t.id}`)) return
     ticketById.set(`${type}:${t.id}`, true)
-    tickets.push({ type, ticket: t, customer: customerName(t.customer_id), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
+    tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
   }
   for (const t of quotes.data || []) pushTicket('quote', t, 'Number / PO')
   for (const t of invoices.data || []) pushTicket('invoice', t, 'Number / PO')
@@ -731,10 +745,12 @@ export async function globalSearch(query, state, filters = {}) {
     for (const t of recentInv || []) {
       if ((t.previous_numbers || []).some((n) => String(n).toLowerCase().includes(lower))) pushTicket('invoice', t, 'Previous invoice number')
       if (vinMatches(t.vehicle_snapshot?.vin)) pushTicket('invoice', t, 'VIN')
+      if (walkInMatches(t)) pushTicket('invoice', t, 'Walk-in name / phone')
     }
     const { data: recentQ } = await supabase.from('quotes').select('*').order('created_at', { ascending: false }).limit(200)
     for (const t of recentQ || []) {
       if (vinMatches(t.vehicle_snapshot?.vin)) pushTicket('quote', t, 'VIN')
+      if (walkInMatches(t)) pushTicket('quote', t, 'Walk-in name / phone')
     }
   }
   // Line-item matches -> parent tickets.
@@ -777,7 +793,8 @@ function applyTicketFilters(tickets, filters = {}) {
     const t = r.ticket
     if (filters.type && r.type !== filters.type) return false
     if (filters.status && t.status !== filters.status) return false
-    if (filters.customerId && t.customer_id !== filters.customerId) return false
+    if (filters.customerId === 'walk-in' && t.customer_id) return false
+    if (filters.customerId && filters.customerId !== 'walk-in' && t.customer_id !== filters.customerId) return false
     if (filters.salespersonId && t.salesperson_id !== filters.salespersonId) return false
     const d = t.issue_date || (t.created_at || '').slice(0, 10)
     if (filters.from && d < filters.from) return false
@@ -907,7 +924,7 @@ export const store = {
         : quote.vehicle_snapshot
       const invoice = {
         id: uid(), number: `INV-${1001 + lsRead(LS_INVOICES, []).length}`,
-        quote_id: quote.id, customer_id: quote.customer_id, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
+        quote_id: quote.id, customer_id: quote.customer_id || null, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
         salesperson_id: quote.salesperson_id || userId, created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'Net 30',

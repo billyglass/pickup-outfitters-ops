@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 
@@ -19,13 +19,15 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const [convertMsg, setConvertMsg] = useState('')
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
-  const customerOf = (id) => data.customers.find((c) => c.id === id)?.company || '—'
+  // Walk-in quotes show the buyer's name from the snapshot, with a tag.
+  const customerOf = (q) => ticketCustomerName(q, data.customers)
   const linesOf = (id) => (data.quoteLines || []).filter((l) => l.quote_id === id)
 
   const filtered = useMemo(() => {
     return data.quotes.filter((q) => {
       if (outstandingOnly && !['Draft', 'Sent', 'Accepted'].includes(q.status)) return false
-      if (fCustomer && q.customer_id !== fCustomer) return false
+      if (fCustomer === 'walk-in' && q.customer_id) return false
+      if (fCustomer && fCustomer !== 'walk-in' && q.customer_id !== fCustomer) return false
       if (fSales && q.salesperson_id !== fSales) return false
       if (fStatus && q.status !== fStatus) return false
       if (fAge) {
@@ -136,6 +138,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={outstandingOnly} onChange={(e) => setOutstandingOnly(e.target.checked)} /> Outstanding only</label>
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
+          <option value="walk-in">Walk-in (no customer record)</option>
           {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
         </select>
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
@@ -164,7 +167,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
             return (
               <tr key={q.id}>
                 <td><strong>{q.number}</strong>{q.converted_invoice_id ? <div className="muted small">→ converted</div> : ''}</td>
-                <td>{customerOf(q.customer_id)}</td>
+                <td>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
                 <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
                 <td>{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
                 <td>{age ?? '—'}d</td>

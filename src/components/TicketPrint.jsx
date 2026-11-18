@@ -28,6 +28,9 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   ].filter(Boolean).join(' · ')
   const vehicleText = ymm || '—'
   const contactName = snapCustomer.contact_name || ''
+  // Walk-in tickets have no customer record and no company — the buyer's
+  // name is the contact name; the Company line is omitted for them.
+  const isWalkIn = !ticket.customer_id && !!snapCustomer.walk_in
   const company = snapCustomer.company || customer?.company || ''
   const address = snapCustomer.address || ''
   const phone = snapCustomer.phone || ''
@@ -57,8 +60,9 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         <div className="print-cols">
           <div>
             <strong>{isQuote ? 'Quotation For:' : 'Invoice For:'}</strong>
+            {isWalkIn && <div>Walk-in (no customer record)</div>}
             {contactName && <div>Name: {contactName}</div>}
-            <div>Company: {company}</div>
+            {company && <div>Company: {company}</div>}
             {address && <div>Address: {address}</div>}
             {phone && <div>Phone: {phone}</div>}
             {email && <div>Email: {email}</div>}

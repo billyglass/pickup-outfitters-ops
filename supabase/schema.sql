@@ -197,7 +197,9 @@ create index if not exists customer_addresses_customer_idx
 -- ---------------------------------------------------------------------------
 create table if not exists public.vehicles (
   id uuid primary key default gen_random_uuid(),
-  customer_id uuid not null references public.customers (id) on delete cascade,
+  -- Nullable (migration 003): a walk-in ticket's vehicle has no customer
+  -- record, so customer_id is null for those vehicles.
+  customer_id uuid references public.customers (id) on delete cascade,
   vin text,
   vin_normalized text generated always as
     (upper(regexp_replace(coalesce(vin, ''), '[^A-Za-z0-9]', '', 'g'))) stored,
@@ -271,7 +273,9 @@ create table if not exists public.quotes (
   id uuid primary key default gen_random_uuid(),
   number text not null unique,
   idempotency_key text unique,
-  customer_id uuid not null references public.customers (id),
+  -- Nullable (migration 003): walk-in / one-off tickets have no customer
+  -- record — name + phone live in customer_snapshot, customer_id is null.
+  customer_id uuid references public.customers (id),
   vehicle_id uuid references public.vehicles (id),
   salesperson_id uuid references auth.users (id),
   created_by uuid references auth.users (id),
@@ -339,7 +343,8 @@ create table if not exists public.invoices (
   previous_numbers text[] not null default '{}',
   idempotency_key text unique,
   quote_id uuid references public.quotes (id),
-  customer_id uuid not null references public.customers (id),
+  -- Nullable (migration 003): walk-in / one-off tickets, see quotes above.
+  customer_id uuid references public.customers (id),
   vehicle_id uuid references public.vehicles (id),
   salesperson_id uuid references auth.users (id),
   created_by uuid references auth.users (id),

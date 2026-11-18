@@ -36,10 +36,8 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
 
   async function save(e) {
     e?.preventDefault()
-    if (!vehicle.customer_id) {
-      setError('Choose a customer for this vehicle.')
-      return
-    }
+    // Customer is optional: a walk-in ticket's vehicle has no customer
+    // record (migration 003). Leave it blank for walk-in vehicles.
     setError('')
     setConflict('')
     setStatus('saving')
@@ -74,9 +72,9 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
       {error && <div className="error">{error}</div>}
       <div className="form-grid">
         <div>
-          <label htmlFor="vf-customer">Customer *</label>
-          <select id="vf-customer" value={vehicle.customer_id} onChange={(e) => markDirty({ customer_id: e.target.value })} required>
-            <option value="">— Choose customer —</option>
+          <label htmlFor="vf-customer">Customer (optional — blank for walk-in vehicles)</label>
+          <select id="vf-customer" value={vehicle.customer_id || ''} onChange={(e) => markDirty({ customer_id: e.target.value || null })}>
+            <option value="">— No customer (walk-in vehicle) —</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>{c.company}</option>
             ))}

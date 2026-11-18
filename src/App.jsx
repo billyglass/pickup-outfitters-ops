@@ -204,7 +204,7 @@ export default function App() {
       .some((f) => String(f || '').toLowerCase().includes(q))
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
-  const customerName = (id) => data.customers.find((c) => c.id === id)?.company || '—'
+  const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
 
   return (
     <div>
@@ -293,6 +293,7 @@ export default function App() {
               </select>
               <select value={searchFilters.customerId} onChange={(e) => setSearchFilters({ ...searchFilters, customerId: e.target.value })}>
                 <option value="">Any customer</option>
+                <option value="walk-in">Walk-in (no customer record)</option>
                 {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
               </select>
               <select value={searchFilters.salespersonId} onChange={(e) => setSearchFilters({ ...searchFilters, salespersonId: e.target.value })}>

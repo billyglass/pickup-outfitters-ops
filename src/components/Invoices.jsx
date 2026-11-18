@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 
@@ -21,12 +21,14 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const [busy, setBusy] = useState('')
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
-  const customerOf = (id) => data.customers.find((c) => c.id === id)?.company || '—'
+  // Walk-in invoices show the buyer's name from the snapshot, with a tag.
+  const customerOf = (inv) => ticketCustomerName(inv, data.customers)
   const linesOf = (id) => (data.invoiceLines || []).filter((l) => l.invoice_id === id)
 
   const filtered = useMemo(() => {
     return data.invoices.filter((inv) => {
-      if (fCustomer && inv.customer_id !== fCustomer) return false
+      if (fCustomer === 'walk-in' && inv.customer_id) return false
+      if (fCustomer && fCustomer !== 'walk-in' && inv.customer_id !== fCustomer) return false
       if (fSales && inv.salesperson_id !== fSales) return false
       if (fStatus && inv.status !== fStatus) return false
       const d = inv.issue_date || (inv.created_at || '').slice(0, 10)
@@ -141,6 +143,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
       <div className="row" style={{ marginTop: 12 }}>
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
           <option value="">All customers</option>
+          <option value="walk-in">Walk-in (no customer record)</option>
           {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
         </select>
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
@@ -165,7 +168,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             return (
               <tr key={inv.id}>
                 <td><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
-                <td>{customerOf(inv.customer_id)}</td>
+                <td>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
                 <td>{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small">VIN {vin}</div></td>
                 <td>{inv.issue_date || (inv.created_at || '').slice(0, 10)}</td>
                 <td>{inv.due_date || '—'}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>

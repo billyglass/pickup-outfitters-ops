@@ -5,6 +5,7 @@ import {
   computeTotals, money, lineTotal, emptyLine, addDays, todayStr,
   dueDateFor, termsDays, customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
+  walkInCustomerSnapshot, isWalkInTicket,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -56,14 +57,31 @@ export default function TicketForm({
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
+  // Walk-in / one-off mode: no customer record — just a name + phone on the
+  // ticket (stored in customer_snapshot, customer_id = null). No customer
+  // record is created and the customer list is not polluted with one-offs.
+  const [walkIn, setWalkIn] = useState(() => {
+    const src = initial || prefill
+    return !!src && isWalkInTicket(src)
+  })
+  const [walkInFields, setWalkInFields] = useState(() => {
+    const src = initial || prefill
+    const s = src?.customer_snapshot || {}
+    return {
+      name: s.contact_name || s.company || '',
+      phone: s.phone || '',
+      email: s.email || '',
+    }
+  })
 
   const customer = customers.find((c) => c.id === ticket.customer_id) || null
   const vinNorm = normalizeVin(veh.vin)
   // A VIN already on file (prefer this customer's record) auto-fills the
   // YMM/unit/plate fields — blank ones only, never overwriting what was typed.
+  // Walk-ins have no customer, so any record for the VIN is the fallback.
   const vinMatch = useMemo(
-    () => findVehicleByVin(vehicles, veh.vin, ticket.customer_id),
-    [vehicles, veh.vin, ticket.customer_id] // eslint-disable-line react-hooks/exhaustive-deps
+    () => findVehicleByVin(vehicles, veh.vin, walkIn ? null : ticket.customer_id),
+    [vehicles, veh.vin, ticket.customer_id, walkIn] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const vinMatchOtherCustomer = !!(vinMatch && ticket.customer_id && vinMatch.customer_id !== ticket.customer_id)
   const lastAutofillVin = useRef('')
@@ -131,22 +149,34 @@ export default function TicketForm({
 
   async function save(e) {
     e?.preventDefault()
-    if (!ticket.customer_id) { setError('Choose a customer first.'); return }
+    if (walkIn) {
+      if (!walkInFields.name.trim()) { setError('Walk-in needs a name.'); return }
+      if (!walkInFields.phone.trim()) { setError('Walk-in needs a phone number.'); return }
+    } else if (!ticket.customer_id) { setError('Choose a customer first.'); return }
     if (!lines.some((l) => String(l.description || '').trim())) { setError('Add at least one line item.'); return }
     setError('')
     setConflict('')
     setStatus('saving')
     try {
-      const snapCustomer = initial && initial.status !== 'Draft'
-        ? initial.customer_snapshot
-        : customerSnapshot(customer, contacts, addresses)
+      // Walk-in: the snapshot IS the customer (name + phone live nowhere
+      // else), built fresh from the fields — except on a non-Draft walk-in
+      // ticket, where the snapshot is frozen like any issued ticket.
+      // Customer-linked: frozen snapshot on non-Draft tickets, fresh from
+      // the customer record otherwise.
+      const snapCustomer = walkIn
+        ? (initial && !prefill && initial.status !== 'Draft' && isWalkInTicket(initial)
+            ? initial.customer_snapshot
+            : walkInCustomerSnapshot(walkInFields.name, walkInFields.phone, walkInFields.email))
+        : initial && initial.status !== 'Draft'
+          ? initial.customer_snapshot
+          : customerSnapshot(customer, contacts, addresses)
       // The vehicle snapshot is ALWAYS built from this ticket's own vehicle
       // fields — these fields are the ticket, so editing them here is what
       // changes the snapshot (and, on save, upserts the Vehicles directory).
       const snapVehicle = vehicleSnapshotFromFields(veh, ticket.vehicle_id || vinMatch?.id || null)
       const saved = await store.saveTicket(
         kind,
-        { ...ticket, tax_rate: taxRate, customer_snapshot: snapCustomer, vehicle_snapshot: snapVehicle },
+        { ...ticket, customer_id: walkIn ? null : ticket.customer_id, tax_rate: taxRate, customer_snapshot: snapCustomer, vehicle_snapshot: snapVehicle },
         lines,
         user?.id
       )
@@ -186,12 +216,30 @@ export default function TicketForm({
       <div className="form-grid">
         <div>
           <label>Customer *</label>
-          <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter customers…" disabled={readOnly} />
-          <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value })}>
-            <option value="">— Choose customer —</option>
-            {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
-          </select>
-          {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
+          <div className="row" role="group" aria-label="Customer type">
+            <button type="button" className={walkIn ? 'btn secondary' : 'btn'} disabled={readOnly} onClick={() => { setWalkIn(false); setStatus('unsaved') }}>Pick a customer</button>
+            <button type="button" className={walkIn ? 'btn' : 'btn secondary'} disabled={readOnly} onClick={() => { setWalkIn(true); setStatus('unsaved') }}>Walk-in — no customer record</button>
+          </div>
+          {walkIn ? (
+            <>
+              <label>Name *</label>
+              <input value={walkInFields.name} disabled={readOnly} autoComplete="off" placeholder="Buyer's name" onChange={(e) => { setWalkInFields((f) => ({ ...f, name: e.target.value })); setStatus('unsaved') }} />
+              <label>Phone *</label>
+              <input value={walkInFields.phone} disabled={readOnly} autoComplete="off" placeholder="Phone number" onChange={(e) => { setWalkInFields((f) => ({ ...f, phone: e.target.value })); setStatus('unsaved') }} />
+              <label>Email (optional)</label>
+              <input value={walkInFields.email} disabled={readOnly} autoComplete="off" placeholder="Email (optional)" onChange={(e) => { setWalkInFields((f) => ({ ...f, email: e.target.value })); setStatus('unsaved') }} />
+              <p className="muted small">Walk-in / one-off — no customer record is created. The name and phone print on the ticket and are searchable.</p>
+            </>
+          ) : (
+            <>
+              <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter customers…" disabled={readOnly} />
+              <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value })}>
+                <option value="">— Choose customer —</option>
+                {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company}</option>)}
+              </select>
+              {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
+            </>
+          )}
         </div>
       </div>
 
@@ -205,7 +253,7 @@ export default function TicketForm({
             onChange={(e) => {
               const v = normalizeVin(e.target.value)
               setVeh((prev) => ({ ...prev, vin: v }))
-              if (!findVehicleByVin(vehicles, v, ticket.customer_id)) {
+              if (!findVehicleByVin(vehicles, v, walkIn ? null : ticket.customer_id)) {
                 setTicket((t) => (t.vehicle_id ? { ...t, vehicle_id: '' } : t))
               }
               setStatus('unsaved')
