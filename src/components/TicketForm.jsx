@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
 import { normalizeVin } from '../lib/csv.js'
 import {
-  computeTotals, money, lineTotal, emptyLine, addDays, todayStr,
+  computeTotals, money, lineTotal, laborAmount, emptyLine, normalizeLineForForm, addDays, todayStr,
   dueDateFor, termsDays, customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf,
@@ -40,8 +40,11 @@ export default function TicketForm({
       due_date: !isQuote ? dueDateFor(issue, settings?.default_payment_terms || 'Net 30') : undefined,
     }
   })
+  // Legacy lines are normalized for the form: a labor-kind line's charge
+  // moves into Labor $, discount/product are dropped. Nothing is rewritten
+  // in the DB until the ticket is saved.
   const [lines, setLines] = useState(() =>
-    (initialLines?.length ? initialLines : [emptyLine()]).map((l) => ({ ...l }))
+    (initialLines?.length ? initialLines : [emptyLine()]).map((l) => normalizeLineForForm(l))
   )
   // Vehicle is entered ON the ticket — VIN + Year/Make/Model on one line,
   // Fleet/Unit on the next. No separate vehicle step: on save the
@@ -142,19 +145,6 @@ export default function TicketForm({
   function updateLine(i, p) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...p } : l)))
     setStatus('unsaved')
-  }
-
-  function applyProduct(i, productId) {
-    const p = products.find((x) => x.id === productId)
-    if (!p) return
-    updateLine(i, {
-      product_id: p.id,
-      part_number: p.part_number || '',
-      description: p.description || p.name,
-      unit_price: Number(p.default_price) || 0,
-      taxable: !!p.taxable,
-      line_kind: p.type || 'part',
-    })
   }
 
   async function save(e) {
@@ -383,21 +373,6 @@ export default function TicketForm({
         <div key={line.id || `new-${i}`} className="card" style={{ padding: 12, marginBottom: 10 }}>
           <div className="form-grid">
             <div>
-              <label>Product (optional — fills the line)</label>
-              <select value={line.product_id || ''} disabled={readOnly} onChange={(e) => applyProduct(i, e.target.value)}>
-                <option value="">— Custom one-time line —</option>
-                {products.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}{p.part_number ? ` (${p.part_number})` : ''} — ${money(p.default_price)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Kind</label>
-              <select value={line.line_kind || 'part'} disabled={readOnly} onChange={(e) => updateLine(i, { line_kind: e.target.value })}>
-                <option value="part">Part</option>
-                <option value="labor">Labor</option>
-                <option value="service">Service</option>
-              </select>
-            </div>
-            <div>
               <label>Description *</label>
               <input value={line.description || ''} disabled={readOnly} onChange={(e) => updateLine(i, { description: e.target.value })} />
             </div>
@@ -414,16 +389,16 @@ export default function TicketForm({
               <input type="number" min="0" step="0.01" value={line.unit_price ?? 0} disabled={readOnly} onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) })} />
             </div>
             <div>
-              <label>Discount (per unit)</label>
-              <input type="number" min="0" step="0.01" value={line.discount ?? 0} disabled={readOnly} onChange={(e) => updateLine(i, { discount: Number(e.target.value) })} />
+              <label>Labor $ (optional — per line)</label>
+              <input type="number" min="0" step="0.01" value={line.labor_amount || ''} disabled={readOnly} placeholder="0.00" onChange={(e) => updateLine(i, { labor_amount: Number(e.target.value) || 0 })} />
             </div>
             <div>
               <label>Taxable</label>
-              <input type="checkbox" style={{ width: 'auto' }} checked={!!line.taxable} disabled={readOnly} onChange={(e) => updateLine(i, { taxable: e.target.checked })} /> Taxable (7.74%)
+              <input type="checkbox" style={{ width: 'auto' }} checked={!!line.taxable} disabled={readOnly} onChange={(e) => updateLine(i, { taxable: e.target.checked })} /> Taxable (7.74% on parts only)
             </div>
           </div>
           <div className="row-between">
-            <strong>Amount: ${money(lineTotal(line))}</strong>
+            <strong>Amount: ${money(lineTotal(line))}{laborAmount(line) ? ` + Labor $${money(laborAmount(line))}` : ''}</strong>
             {!readOnly && <button type="button" className="btn secondary" onClick={() => { setLines(lines.filter((_, idx) => idx !== i)); setStatus('unsaved') }}>Remove line</button>}
           </div>
         </div>
@@ -435,7 +410,7 @@ export default function TicketForm({
         <tbody>
           <tr><td>Subtotal</td><td style={{ textAlign: 'right' }}>${money(totals.subtotal)}</td></tr>
           <tr><td>Tax ({(taxRate * 100).toFixed(2)}%) — taxable lines only</td><td style={{ textAlign: 'right' }}>${money(totals.taxTotal)}</td></tr>
-          <tr><td>Labor (included in subtotal — shown separately, not added twice)</td><td style={{ textAlign: 'right' }}>${money(totals.labor)}</td></tr>
+          <tr><td>Labor (sum of the Labor $ on each line)</td><td style={{ textAlign: 'right' }}>${money(totals.labor)}</td></tr>
           <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>${money(totals.total)}</strong></td></tr>
         </tbody>
       </table>

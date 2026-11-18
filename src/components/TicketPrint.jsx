@@ -1,11 +1,11 @@
-import { money, computeTotals } from '../lib/tickets.js'
+import { money, computeTotals, lineTotal, laborAmount } from '../lib/tickets.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
 // "Quotation For:" / "Invoice For:" Name / Company / Address / Phone / Email
 // Date + valid until (quote) / due date (invoice)
 // SALESPERSON / P.O. NUMBER / VEHICLE / TERMS
-// Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / TAXABLE / AMOUNT
+// Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / TAXABLE / AMOUNT / LABOR
 // NOTES — SUBTOTAL / TAX (7.74%) / LABOR / TOTAL — "Thank You For Your Business"
 // Plain black-and-white, no background colours. VIN and Year/Make/Model
 // print on the SAME line, matching the ticket's Vehicle section.
@@ -86,19 +86,20 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         <div className="print-vin">{vehicleLine || 'Vehicle: —'}</div>
 
         <table className="print-lines">
-          <thead><tr><th>Quantity</th><th>Description</th><th>Part Number</th><th>Unit Price</th><th>Taxable</th><th>Amount</th></tr></thead>
+          <thead><tr><th>Quantity</th><th>Description</th><th>Part Number</th><th>Unit Price</th><th>Taxable</th><th>Amount</th><th>Labor</th></tr></thead>
           <tbody>
             {(lines || []).map((l, i) => (
               <tr key={l.id || i}>
                 <td>{Number(l.quantity) || 0}</td>
-                <td>{l.description}{l.line_kind === 'labor' ? ' (Labor)' : ''}</td>
+                <td>{l.description}</td>
                 <td>{l.part_number || '—'}</td>
                 <td>${money(l.unit_price)}</td>
                 <td>{l.taxable ? 't' : ''}</td>
-                <td>${money(l.line_total)}</td>
+                <td>${money(lineTotal(l))}</td>
+                <td>${money(laborAmount(l))}</td>
               </tr>
             ))}
-            {(lines || []).length === 0 && <tr><td colSpan="6">No line items.</td></tr>}
+            {(lines || []).length === 0 && <tr><td colSpan="7">No line items.</td></tr>}
           </tbody>
         </table>
 

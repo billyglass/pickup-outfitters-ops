@@ -4,11 +4,12 @@ import { normalizeVin, normalizePhone } from './csv.js'
 // Money: numeric(12,2) in the DB, half-up rounding to cents, per line.
 // Tax rule (matches Bill's Excel sheet): only lines marked taxable get the
 // 7.74% tax. Tax is computed per taxable line and rounded to the cent.
-// Labor: labor lines ARE in the subtotal (they are line items). The Labor
-// figure shown on the ticket is the labor subtotal, informational only —
-// it is NOT added again on top of the subtotal (the Excel template's
-// TOTAL = SUBTOTAL + TAX + LABOR only works there because labor is a
-// separate lump sum outside the line amounts; here labor lives in the lines).
+// Labor (Nov 18, matching Bill's Excel template): each line has a flat
+// Labor $ amount, optional. Subtotal = parts only (qty x unit price).
+// Labor total = sum of the Labor $ column. Tax = 7.74% on TAXABLE PARTS
+// amounts only (labor is not taxed). TOTAL = Subtotal + Tax + Labor.
+// This replaces the old math, where labor-kind lines lived inside the
+// subtotal and were shown separately but not added again.
 
 export const TAX_RATE_DEFAULT = 0.0774
 
@@ -20,10 +21,16 @@ export function money(n) {
   return (Number(n) || 0).toFixed(2)
 }
 
+// Parts amount for a line: qty x unit price. Discount is gone (Nov 18 —
+// Bill doesn't use it) and is ignored if an old line still carries one.
 export function lineTotal(line) {
   const qty = Number(line.quantity) || 0
-  const net = (Number(line.unit_price) || 0) - (Number(line.discount) || 0)
-  return roundCents(qty * net)
+  return roundCents(qty * (Number(line.unit_price) || 0))
+}
+
+// Flat Labor $ amount on a line (optional, blank/0 is fine). Not taxed.
+export function laborAmount(line) {
+  return roundCents(Number(line.labor_amount) || 0)
 }
 
 export function computeTotals(lines, taxRate = TAX_RATE_DEFAULT) {
@@ -32,15 +39,44 @@ export function computeTotals(lines, taxRate = TAX_RATE_DEFAULT) {
   let labor = 0
   let tax = 0
   for (const line of lines || []) {
-    const total = lineTotal(line)
-    subtotal = roundCents(subtotal + total)
-    if (line.line_kind === 'labor') labor = roundCents(labor + total)
-    if (line.taxable) tax = roundCents(tax + roundCents(total * rate))
+    const parts = lineTotal(line)
+    subtotal = roundCents(subtotal + parts)
+    labor = roundCents(labor + laborAmount(line))
+    if (line.taxable) tax = roundCents(tax + roundCents(parts * rate))
   }
-  return { subtotal, labor, taxTotal: tax, total: roundCents(subtotal + tax) }
+  return { subtotal, labor, taxTotal: tax, total: roundCents(subtotal + tax + labor) }
 }
 
-export function emptyLine(kind = 'part') {
+// Convert a stored line to the current form shape (form layer only —
+// nothing is rewritten in the DB until the ticket is saved):
+//  - a legacy labor-kind line's charge moves into Labor $ (parts price 0),
+//    so its totals are unchanged under the new math;
+//  - a part/service line keeps qty x price, discount and product ignored.
+export function normalizeLineForForm(line) {
+  const l = { ...(line || {}) }
+  if (l.line_kind === 'labor') {
+    const amount = roundCents(Number(l.line_total) || (Number(l.quantity) || 0) * (Number(l.unit_price) || 0))
+    return {
+      ...l,
+      quantity: 1,
+      unit_price: 0,
+      labor_amount: amount,
+      discount: 0,
+      product_id: null,
+      line_kind: 'part',
+      line_total: 0,
+    }
+  }
+  return {
+    ...l,
+    labor_amount: roundCents(Number(l.labor_amount) || 0),
+    discount: 0,
+    product_id: null,
+    line_kind: 'part',
+  }
+}
+
+export function emptyLine() {
   return {
     id: null,
     product_id: null,
@@ -48,9 +84,10 @@ export function emptyLine(kind = 'part') {
     description: '',
     quantity: 1,
     unit_price: 0,
+    labor_amount: 0,
     discount: 0,
     taxable: true,
-    line_kind: kind,
+    line_kind: 'part',
     line_total: 0,
     sort_order: 0,
   }
@@ -283,19 +320,23 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   const lines = (sourceLines || [])
     .slice()
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((l, i) => ({
-      id: null,
-      product_id: l.product_id || null,
-      part_number: l.part_number || '',
-      description: l.description || '',
-      quantity: Number(l.quantity) || 1,
-      unit_price: Number(l.unit_price) || 0,
-      discount: Number(l.discount) || 0,
-      taxable: !!l.taxable,
-      line_kind: l.line_kind || 'part',
-      line_total: 0,
-      sort_order: i,
-    }))
+    .map((l, i) => {
+      const n = normalizeLineForForm(l)
+      return {
+        id: null,
+        product_id: null,
+        part_number: n.part_number || '',
+        description: n.description || '',
+        quantity: Number(n.quantity) || 1,
+        unit_price: Number(n.unit_price) || 0,
+        labor_amount: laborAmount(n),
+        discount: 0,
+        taxable: !!n.taxable,
+        line_kind: 'part',
+        line_total: 0,
+        sort_order: i,
+      }
+    })
   return { ticket, lines, sourceLabel: label }
 }
 
@@ -371,15 +412,16 @@ export function cleanLinePayload(line, parentId, parentFk, index) {
   // the caller (update by id, or insert without id so Postgres generates it).
   return {
     [parentFk]: parentId,
-    product_id: line.product_id || null,
+    product_id: null, // product picker removed Nov 18 — lines are typed, not picked
     part_number: (line.part_number || '').trim() || null,
     description: (line.description || '').trim(),
     quantity: Number(line.quantity) || 0,
     unit_price: Number(line.unit_price) || 0,
-    discount: Number(line.discount) || 0,
+    labor_amount: laborAmount(line),
+    discount: 0, // discount removed Nov 18 — old values are ignored, never saved
     taxable: !!line.taxable,
-    line_kind: line.line_kind || 'part',
-    line_total: lineTotal(line),
+    line_kind: 'part', // kind removed Nov 18 — every line is a parts line + optional labor $
+    line_total: lineTotal(line), // parts amount only; labor lives in labor_amount
     sort_order: index,
   }
 }
