@@ -12,11 +12,15 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onPrint,
+  prefill, onDuplicate,
 }) {
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? TAX_RATE)
   const [ticket, setTicket] = useState(() => {
     if (initial) return { ...initial }
+    // Duplicate (prefill): a new Draft with no id/number — Save allocates a
+    // new atomic number. The original ticket is never touched.
+    if (prefill) return { ...prefill }
     const issue = todayStr()
     return {
       customer_id: customers[0]?.id || '',
@@ -38,7 +42,7 @@ export default function TicketForm({
     (initialLines?.length ? initialLines : [emptyLine()]).map((l) => ({ ...l }))
   )
   const [vinOverride, setVinOverride] = useState(
-    initial?.vehicle_snapshot?.vin || ''
+    initial?.vehicle_snapshot?.vin || prefill?.vehicle_snapshot?.vin || ''
   )
   const [status, setStatus] = useState('saved')
   const [error, setError] = useState('')
@@ -131,8 +135,9 @@ export default function TicketForm({
     <form className="card" onSubmit={save}>
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
-          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${initial.number}` : `New ${isQuote ? 'quote' : 'invoice'}`}
+          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (copy of ${prefill.sourceLabel})` : `New ${isQuote ? 'quote' : 'invoice'}`}
           {initial && <span className="pill" style={{ marginLeft: 8 }}>{initial.status}</span>}
+          {prefill && <span className="pill" style={{ marginLeft: 8 }}>New — number assigned on save</span>}
         </h2>
         <span className={`saved ${status === 'saved' ? 'saved-ok' : status === 'saving' ? 'saving' : 'unsaved'}`}>
           {status === 'saved' ? '● Saved' : status === 'saving' ? '● Saving…' : '● Unsaved changes'}
@@ -140,6 +145,12 @@ export default function TicketForm({
       </div>
       {conflict && <div className="error">{conflict} <button type="button" className="btn secondary" onClick={onCancel}>Reload</button></div>}
       {error && <div className="error">{error}</div>}
+      {prefill && (
+        <div className="warn">
+          <strong>Duplicated from {prefill.sourceLabel}.</strong> Everything is copied — customer, lines, notes, terms, PO.
+          Change the vehicle / VIN below for this fleet unit, then Save. A new number is assigned on save; the original {isQuote ? 'quote' : 'invoice'} is unchanged.
+        </div>
+      )}
       {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
       {initial && <p className="muted small">Created by {profiles.find((p) => p.id === initial.created_by)?.name || '—'} · Salesperson {profiles.find((p) => p.id === initial.salesperson_id)?.name || '—'} · Version {initial.version} · {initial.updated_at ? `Last updated ${initial.updated_at.slice(0, 10)}` : ''}</p>}
 
@@ -153,13 +164,14 @@ export default function TicketForm({
           </select>
           {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
         </div>
-        <div>
-          <label>Vehicle</label>
-          <select value={ticket.vehicle_id || ''} disabled={readOnly || !ticket.customer_id} onChange={(e) => { patch({ vehicle_id: e.target.value }); const v = vehicles.find((x) => x.id === e.target.value); setVinOverride(v?.vin || '') }}>
+        <div style={prefill ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
+          <label>Vehicle {prefill && '— change this for the fleet unit'}</label>
+          <select value={ticket.vehicle_id || ''} disabled={readOnly || !ticket.customer_id} autoFocus={!!prefill} onChange={(e) => { patch({ vehicle_id: e.target.value }); const v = vehicles.find((x) => x.id === e.target.value); setVinOverride(v?.vin || '') }}>
             <option value="">— No vehicle —</option>
             {customerVehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}{v.fleet_unit ? ` · Unit ${v.fleet_unit}` : ''}{v.plate ? ` · ${v.plate}` : ''}</option>)}
           </select>
           {vehicle && <p className="muted small">{vehicleLabel(vehicle)} · Unit {vehicle.fleet_unit || '—'} · Plate {vehicle.plate || '—'}</p>}
+          {prefill && <p className="muted small">Change the vehicle / VIN for this fleet unit — everything else is copied.</p>}
         </div>
       </div>
 
@@ -168,6 +180,7 @@ export default function TicketForm({
         <input value={vinOverride} disabled={readOnly} onChange={(e) => setVinOverride(e.target.value.toUpperCase())} placeholder="Auto-filled from the vehicle — edit only if this ticket's VIN differs" />
         {vinDiffers && <div className="warn">This VIN differs from the vehicle record ({vehicle.vin}). It is saved only on this ticket as a snapshot override — the vehicle record is not changed.</div>}
         {!vehicle && <p className="muted small">Pick a vehicle to auto-fill the VIN, or type it here.</p>}
+        {prefill && vehicle && <p className="muted small">VIN auto-fills from the vehicle you pick — change the vehicle above and the VIN follows.</p>}
       </div>
 
       <div className="form-grid">
@@ -292,9 +305,10 @@ export default function TicketForm({
       <div className="row" style={{ marginTop: 20 }}>
         {!readOnly && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
         {initial && onPrint && <button className="btn secondary" type="button" onClick={onPrint}>Print</button>}
+        {initial && onDuplicate && <button className="btn secondary" type="button" onClick={onDuplicate}>Duplicate</button>}
         <button className="btn secondary" type="button" onClick={onCancel}>Close</button>
       </div>
-      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'QT-' : 'INV-'}… from 1001) — numbers are never typed in by hand.</p>}
+      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'QT-' : 'INV-'}… from 1001) — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
     </form>
   )
 }

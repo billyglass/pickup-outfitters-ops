@@ -129,6 +129,59 @@ export function vehicleSnapshot(vehicle, vinOverride) {
   }
 }
 
+export function duplicateTicket(kind, source, sourceLines, userId, settings) {
+  // Fleet duplicate: build a NEW Draft ticket prefilled from a source ticket.
+  // Pure function — nothing is saved here. The caller opens TicketForm with
+  // the result; only Save creates the record, with a NEW atomic number.
+  // Carries over: customer, vehicle (same one, for the user to change),
+  // lines (in order), customer notes, payment terms, PO number.
+  // Does NOT carry over: id, number, previous_numbers, quote_id (a duplicate
+  // is not a conversion), converted_invoice_id, follow-up date, payments /
+  // balance history, created_by (reset to the current user), version.
+  // Void sources are fine to copy — the copy is a fresh Draft.
+  const issue = todayStr()
+  const label = `${kind === 'quote' ? 'QT-' : 'INV-'}${source.number}`
+  const sourceNote = `Duplicated from ${label} on ${issue}`
+  const ticket = {
+    customer_id: source.customer_id,
+    vehicle_id: source.vehicle_id || '',
+    vehicle_snapshot: source.vehicle_snapshot || null,
+    salesperson_id: userId || source.salesperson_id || '',
+    created_by: userId || '',
+    status: 'Draft',
+    po_number: source.po_number || '',
+    payment_terms: source.payment_terms || settings?.default_payment_terms || 'Net 30',
+    customer_notes: source.customer_notes || '',
+    internal_notes: [source.internal_notes, sourceNote].filter(Boolean).join('\n'),
+    issue_date: issue,
+    sourceLabel: label,
+  }
+  if (kind === 'quote') {
+    ticket.expires_on = addDays(issue, settings?.quote_validity_days ?? 15)
+    ticket.follow_up_on = ''
+  } else {
+    ticket.due_date = dueDateFor(issue, ticket.payment_terms)
+    ticket.quote_id = null
+  }
+  const lines = (sourceLines || [])
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((l, i) => ({
+      id: null,
+      product_id: l.product_id || null,
+      part_number: l.part_number || '',
+      description: l.description || '',
+      quantity: Number(l.quantity) || 1,
+      unit_price: Number(l.unit_price) || 0,
+      discount: Number(l.discount) || 0,
+      taxable: !!l.taxable,
+      line_kind: l.line_kind || 'part',
+      line_total: 0,
+      sort_order: i,
+    }))
+  return { ticket, lines, sourceLabel: label }
+}
+
 export function vehicleLabel(vehicle) {
   if (!vehicle) return '—'
   return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Vehicle'

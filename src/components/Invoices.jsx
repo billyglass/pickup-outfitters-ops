@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 
@@ -8,6 +8,7 @@ const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
 export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError }) {
   const [editing, setEditing] = useState(undefined)
+  const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')
   const [fSales, setFSales] = useState('')
@@ -64,6 +65,14 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     try { await store.deleteTicket('invoice', inv.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
+  // Fleet duplicate: opens a NEW Draft prefilled from the source — nothing
+  // is saved until the user clicks Save, which assigns a new INV- number.
+  // Void / Paid sources are fine to copy; the copy is always a fresh Draft.
+  function duplicate(inv) {
+    setEditing(undefined)
+    setDuplicating(duplicateTicket('invoice', inv, linesOf(inv.id), user?.id, settings))
+  }
+
   if (printing) {
     const inv = printing
     return (
@@ -76,9 +85,26 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
       />
     )
   }
+  if (duplicating) {
+    return (
+      <TicketForm
+        key={`dup-${duplicating.sourceLabel}`}
+        kind="invoice"
+        initial={null}
+        prefill={duplicating.ticket}
+        lines={duplicating.lines}
+        customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
+        products={data.products || []} profiles={data.profiles || []}
+        user={user} profile={profile} isAdmin={isAdmin} settings={settings}
+        onSaved={async () => { setDuplicating(null); await onReload() }}
+        onCancel={() => setDuplicating(null)}
+      />
+    )
+  }
   if (editing !== undefined) {
     return (
       <TicketForm
+        key={editing ? `edit-${editing.id}` : 'new-invoice'}
         kind="invoice"
         initial={editing}
         lines={editing ? linesOf(editing.id) : undefined}
@@ -88,6 +114,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         onSaved={async () => { setEditing(undefined); await onReload() }}
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
+        onDuplicate={editing ? () => duplicate(editing) : undefined}
       />
     )
   }
@@ -98,7 +125,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}) · ${openValue.toFixed(2)} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
-      <p className="muted small">Numbers are assigned atomically on save (INV-… from 1001). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only).</p>
+      <p className="muted small">Numbers are assigned atomically on save (INV-… from 1001). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>
           <h3 style={{ marginTop: 0 }}>Void invoice {voiding.number}?</h3>
@@ -150,6 +177,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                   <div className="row">
                     <button className="btn secondary" onClick={() => setEditing(inv)}>Open</button>
                     <button className="btn secondary" onClick={() => setPrinting(inv)}>Print</button>
+                    <button className="btn secondary" onClick={() => duplicate(inv)}>Duplicate</button>
                     {inv.status === 'Draft' && <button className="btn secondary" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
                     {isAdmin && inv.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(inv)}>Delete</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (

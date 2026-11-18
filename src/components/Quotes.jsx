@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays } from '../lib/tickets.js'
+import { ageDays, duplicateTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 
@@ -8,6 +8,7 @@ const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
 
 export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError }) {
   const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
+  const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')
   const [fSales, setFSales] = useState('')
@@ -70,6 +71,13 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
     try { await store.deleteTicket('quote', q.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
+  // Fleet duplicate: opens a NEW Draft prefilled from the source — nothing
+  // is saved until the user clicks Save, which assigns a new QT- number.
+  function duplicate(q) {
+    setEditing(undefined)
+    setDuplicating(duplicateTicket('quote', q, linesOf(q.id), user?.id, settings))
+  }
+
   if (printing) {
     const q = printing
     return (
@@ -82,9 +90,26 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       />
     )
   }
+  if (duplicating) {
+    return (
+      <TicketForm
+        key={`dup-${duplicating.sourceLabel}`}
+        kind="quote"
+        initial={null}
+        prefill={duplicating.ticket}
+        lines={duplicating.lines}
+        customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
+        products={data.products || []} profiles={data.profiles || []}
+        user={user} profile={profile} isAdmin={isAdmin} settings={settings}
+        onSaved={async () => { setDuplicating(null); await onReload() }}
+        onCancel={() => setDuplicating(null)}
+      />
+    )
+  }
   if (editing !== undefined) {
     return (
       <TicketForm
+        key={editing ? `edit-${editing.id}` : 'new-quote'}
         kind="quote"
         initial={editing}
         lines={editing ? linesOf(editing.id) : undefined}
@@ -94,6 +119,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         onSaved={async () => { setEditing(undefined); await onReload() }}
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
+        onDuplicate={editing ? () => duplicate(editing) : undefined}
       />
     )
   }
@@ -150,6 +176,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                   <div className="row">
                     <button className="btn secondary" onClick={() => setEditing(q)}>Open</button>
                     <button className="btn secondary" onClick={() => setPrinting(q)}>Print</button>
+                    <button className="btn secondary" onClick={() => duplicate(q)}>Duplicate</button>
                     {q.status === 'Draft' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Sent')}>Send</button>}
                     {q.status === 'Sent' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Accepted')}>Accept</button>}
                     {['Draft', 'Sent'].includes(q.status) && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Declined')}>Decline</button>}
