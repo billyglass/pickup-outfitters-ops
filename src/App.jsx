@@ -156,9 +156,11 @@ export default function App() {
   }
 
   async function handleDeleteCustomer(id, company) {
-    if (!window.confirm(`Delete customer "${company}" and all of its vehicles? This cannot be undone. Admin only.`)) return
+    // The edit form already asks "Delete this customer and all of its
+    // vehicles?" before calling this, so no second popup.
     try {
       await store.deleteCustomer(id)
+      setEditingCustomer(undefined)
       setSelectedCustomerId(null)
       await loadData()
     } catch (err) {
@@ -365,8 +367,10 @@ export default function App() {
                 initial={editingCustomer}
                 contacts={editingCustomer ? data.contacts.filter((c) => c.customer_id === editingCustomer.id) : []}
                 addresses={editingCustomer ? data.addresses.filter((a) => a.customer_id === editingCustomer.id) : []}
+                isAdmin={isAdmin}
                 onSaved={async (saved) => { setEditingCustomer(undefined); setSelectedCustomerId(saved.id); await loadData() }}
                 onCancel={() => setEditingCustomer(undefined)}
+                onDelete={isAdmin && editingCustomer?.id ? () => handleDeleteCustomer(editingCustomer.id, editingCustomer.company) : undefined}
               />
             ) : selectedCustomer ? (
               <div className="card">
@@ -412,7 +416,6 @@ export default function App() {
                 )}
                 <div className="row" style={{ marginTop: 16 }}>
                   <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
-                  {isAdmin && <button className="btn danger" onClick={() => handleDeleteCustomer(selectedCustomer.id, selectedCustomer.company)}>Delete customer</button>}
                 </div>
               </div>
             ) : (

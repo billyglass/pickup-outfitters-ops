@@ -5,7 +5,8 @@ import { titleCaseName } from '../lib/names.js'
 const emptyContact = () => ({ name: '', phone: '', email: '', title: '', is_primary: false })
 const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', city: '', state: '', zip: '', is_primary: false })
 
-export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, onSaved, onCancel }) {
+export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, isAdmin, onSaved, onCancel, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [customer, setCustomer] = useState(
     initial || { company: '', customer_type: 'Retail', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
   )
@@ -178,6 +179,19 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
         <button className="btn" type="submit" disabled={status === 'saving'}>Save customer</button>
         <button className="btn secondary" type="button" onClick={onCancel}>Cancel</button>
       </div>
+      {initial?.id && isAdmin && onDelete && (
+        <div className="danger-zone">
+          {!confirmDelete ? (
+            <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this customer…</button>
+          ) : (
+            <span>
+              Delete this customer and all of its vehicles? This cannot be undone.{' '}
+              <button className="btn danger small" type="button" onClick={onDelete}>Yes, delete customer</button>{' '}
+              <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+            </span>
+          )}
+        </div>
+      )}
     </form>
   )
 }

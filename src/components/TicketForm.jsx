@@ -15,8 +15,9 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onPrint,
-  prefill, onDuplicate, onConvert,
+  prefill, onDuplicate, onConvert, onDelete,
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? TAX_RATE)
   const [ticket, setTicket] = useState(() => {
@@ -441,6 +442,19 @@ export default function TicketForm({
         {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
         <button className="btn secondary" type="button" onClick={onCancel}>Close</button>
       </div>
+      {initial && onDelete && (
+        <div className="danger-zone">
+          {!confirmDelete ? (
+            <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this {isQuote ? 'quote' : 'draft invoice'}…</button>
+          ) : (
+            <span>
+              Delete this {isQuote ? 'quote' : 'draft invoice'}? This cannot be undone.{' '}
+              <button className="btn danger small" type="button" onClick={onDelete}>Yes, delete</button>{' '}
+              <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+            </span>
+          )}
+        </div>
+      )}
       {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'quotes QT-A…' : 'invoices INV-…'}) — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
     </form>
   )

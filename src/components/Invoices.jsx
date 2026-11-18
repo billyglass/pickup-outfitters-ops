@@ -74,8 +74,9 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
 
   async function handleDelete(inv) {
     if (!isAdmin) return
-    if (!window.confirm(`Delete draft invoice ${inv.number}? Drafts only — this cannot be undone.`)) return
-    try { await store.deleteTicket('invoice', inv.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
+    // The form already asks "Delete this draft invoice?" before calling
+    // this, so no second popup — one deliberate confirm is enough.
+    try { await store.deleteTicket('invoice', inv.id, true); setEditing(undefined); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
   // Fleet duplicate: opens a NEW Draft prefilled from the source — nothing
@@ -136,6 +137,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
+        onDelete={isAdmin && editing?.status === 'Draft' ? () => handleDelete(editing) : undefined}
       />
     )
   }
@@ -215,7 +217,6 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
                     {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
-                    {isAdmin && inv.status === 'Draft' && <button className="btn danger small" onClick={() => handleDelete(inv)}>Delete</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (
                       <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}

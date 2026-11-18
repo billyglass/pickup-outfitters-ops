@@ -61,6 +61,9 @@ table.list td .sub { white-space: nowrap; }
 /* Row actions stay on one line, compact buttons. */
 .row.actions { flex-wrap: nowrap; gap: 6px; }
 .btn.small { padding: 6px 10px; font-size: 13px; }
+/* Danger zone: delete lives at the bottom of the edit form, behind a
+   two-step confirm — never in a list row next to everyday buttons. */
+.danger-zone { margin-top: 28px; padding-top: 14px; border-top: 1px solid #f5c6cb; font-size: 13px; color: var(--grey-700); }
 /* Filter rows: selects/inputs size to their content, not full width. */
 .row.filters select, .row.filters input[type="date"] { width: auto; }
 .row.filters input[type="checkbox"] { width: auto; }
