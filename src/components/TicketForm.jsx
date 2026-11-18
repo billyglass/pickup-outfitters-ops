@@ -434,7 +434,7 @@ export default function TicketForm({
         {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
         <button className="btn secondary" type="button" onClick={onCancel}>Close</button>
       </div>
-      {!initial && <p className="muted small">Saving assigns the number automatically from the sequence shared with {isQuote ? 'invoices' : 'quotes'} ({isQuote ? 'QT-' : 'INV-'}…), so a number is never used twice — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
+      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'quotes QT-A…' : 'invoices INV-…'}) — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
     </form>
   )
 }

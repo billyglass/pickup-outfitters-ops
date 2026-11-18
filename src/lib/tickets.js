@@ -292,7 +292,9 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   // balance history, created_by (reset to the current user), version.
   // Void sources are fine to copy — the copy is a fresh Draft.
   const issue = todayStr()
-  const label = `${kind === 'quote' ? 'QT-' : 'INV-'}${source.number}`
+  // source.number already carries its full prefix (QT-1001, QT-A1003,
+  // INV-1002, ...) — do not prepend another one.
+  const label = source.number
   const sourceNote = `Duplicated from ${label} on ${issue}`
   const ticket = {
     customer_id: source.customer_id || null,

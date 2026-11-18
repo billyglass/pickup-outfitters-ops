@@ -579,7 +579,7 @@ export default function App() {
               Tax rate: {data.settings ? `${(Number(data.settings.tax_rate) * 100).toFixed(2)}%` : '—'} ·
               Terms: {data.settings?.default_payment_terms || '—'} ·
               Quote validity: {data.settings?.quote_validity_days || '—'} days ·<br />
-              Quotes and invoices share one number sequence (QT- / INV-…) — a number is never used for both a quote and an invoice.
+              Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.
             </p>
             <p className="muted">
               Numbering prefixes and next numbers live in the <code>settings</code> table and the

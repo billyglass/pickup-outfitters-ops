@@ -81,7 +81,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
     if (['Declined', 'Expired'].includes(q.status)) return
     if (q.status !== 'Accepted') {
       if (!window.confirm(`Quote ${q.number} hasn't been accepted yet. Convert it to an invoice anyway and mark it Accepted?${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
-    } else if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number will be assigned from the shared quote/invoice sequence. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    } else if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number (INV-…) will be assigned from the invoice sequence. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
     setBusy(`convert-${q.id}`)
     setConvertMsg('')
     setConvertedInvoice(null)
@@ -103,7 +103,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   }
 
   // Fleet duplicate: opens a NEW Draft prefilled from the source — nothing
-  // is saved until the user clicks Save, which assigns a new QT- number.
+  // is saved until the user clicks Save, which assigns a new QT-A number.
   function duplicate(q) {
     setEditing(undefined)
     setDuplicating(duplicateTicket('quote', q, linesOf(q.id), user?.id, settings))
@@ -181,7 +181,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         <h2 style={{ margin: 0 }}>Quotes — Outstanding ({outstanding.length}) · ${outstandingValue.toFixed(2)}</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
       </div>
-      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Every open quote has a Convert to invoice button — converting an Accepted quote creates the invoice with no retyping, and it can only be converted once. A Draft or Sent quote asks first and is marked Accepted when converted. Quotes and invoices share one number sequence, so a number is never used twice.</p>
+      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Every open quote has a Convert to invoice button — converting an Accepted quote creates the invoice with no retyping, and it can only be converted once. A Draft or Sent quote asks first and is marked Accepted when converted. Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.</p>
       {convertMsg && (
         <div className="success">
           {convertMsg}{' '}

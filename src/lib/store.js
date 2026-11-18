@@ -724,13 +724,14 @@ function localLoad() {
   }
 }
 
-function localNextTicketNumber() {
-  // Local mode mirrors the shared server sequence: quotes and invoices
-  // draw from ONE counter, seeded after the highest numeric suffix already
-  // used by either kind (or 1001 if there are no tickets yet), so a number
-  // can never be issued as both a QT- and an INV- number.
-  const all = [...lsRead(LS_QUOTES, []), ...lsRead(LS_INVOICES, [])]
-  const maxNum = all.reduce((m, t) => {
+function localNextNumber(kind) {
+  // Local mode mirrors the separate server sequences: quotes draw from
+  // their own counter (QT-A…), invoices from their own (INV-…), each
+  // seeded after the highest numeric suffix already used by that kind
+  // (or 1001 if there are no tickets of that kind yet). The two systems
+  // are independent, so a quote and an invoice may share a numeric part.
+  const rows = lsRead(kind === 'quote' ? LS_QUOTES : LS_INVOICES, [])
+  const maxNum = rows.reduce((m, t) => {
     const n = parseInt(String(t.number || '').replace(/[^0-9]/g, ''), 10)
     return Number.isFinite(n) ? Math.max(m, n) : m
   }, 1000)
@@ -767,7 +768,7 @@ function localSaveTicket(kind, ticket, lines, userId) {
   }
   if (!saved.id) {
     saved.id = uid()
-    saved.number = `${kind === 'quote' ? 'QT-' : 'INV-'}${localNextTicketNumber()}`
+    saved.number = `${kind === 'quote' ? 'QT-A' : 'INV-'}${localNextNumber(kind)}`
     saved.created_by = userId
     saved.created_at = saved.updated_at
     if (kind === 'invoice') saved.balance_due = totals.total
@@ -1065,7 +1066,7 @@ export const store = {
           ) || quote.vehicle_snapshot
         : quote.vehicle_snapshot
       const invoice = {
-        id: uid(), number: `INV-${localNextTicketNumber()}`,
+        id: uid(), number: `INV-${localNextNumber('invoice')}`,
         quote_id: quote.id, customer_id: quote.customer_id || null, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
         salesperson_id: quote.salesperson_id || userId, created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
