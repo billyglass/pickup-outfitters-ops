@@ -7,7 +7,7 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired']
 
-export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, onOpened }) {
+export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, onOpened, onOpenInvoice }) {
   const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
   // Open a specific quote on mount (e.g. clicked from the Vehicles tab).
   const openedRef = useRef(false)
@@ -26,6 +26,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const [outstandingOnly, setOutstandingOnly] = useState(true)
   const [busy, setBusy] = useState('')
   const [convertMsg, setConvertMsg] = useState('')
+  const [convertedInvoice, setConvertedInvoice] = useState(null) // { id, number } of the invoice just created / already linked
   const [saveAs, setSaveAs] = useState(null) // walk-in quote to save as a customer
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
@@ -62,17 +63,35 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
     } catch (err) { onError(err.message || 'Status change failed.') } finally { setBusy('') }
   }
 
-  async function convert(q) {
+  // Convert is on EVERY open quote, not just Accepted ones — Bill couldn't
+  // find the button because Draft/Sent quotes had none. Draft/Sent quotes
+  // convert too, but only after confirming they should be marked Accepted.
+  // Declined/Expired quotes never convert. Already-converted quotes show
+  // the invoice instead of converting again.
+  const canConvert = (q) => !q.converted_invoice_id && !['Declined', 'Expired'].includes(q.status)
+  const convertedInvoiceOf = (q) => data.invoices.find((i) => i.id === q.converted_invoice_id) || null
+
+  async function convert(q, opts = {}) {
     if (q.converted_invoice_id) {
-      setConvertMsg(`This quote was already converted — see the invoice linked on the quote.`)
+      const existing = convertedInvoiceOf(q)
+      setConvertedInvoice(existing ? { id: existing.id, number: existing.number } : null)
+      setConvertMsg(`This quote was already converted${existing ? ` to invoice ${existing.number}` : ''}.`)
       return
     }
-    if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number will be assigned. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.`)) return
+    if (['Declined', 'Expired'].includes(q.status)) return
+    if (q.status !== 'Accepted') {
+      if (!window.confirm(`Quote ${q.number} hasn't been accepted yet. Convert it to an invoice anyway and mark it Accepted?${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    } else if (!window.confirm(`Convert quote ${q.number} to an invoice? A new invoice number will be assigned from the shared quote/invoice sequence. This cannot create a duplicate — if it was already converted, the existing invoice is shown instead.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
     setBusy(`convert-${q.id}`)
     setConvertMsg('')
+    setConvertedInvoice(null)
     try {
-      const invoice = await store.convertQuoteToInvoice(q, linesOf(q.id), user?.id, data)
-      setConvertMsg(`Converted to invoice ${invoice.number}. Open Invoices to view / print it.`)
+      // Draft/Sent quotes become Accepted as part of the conversion.
+      const quoteToConvert = q.status === 'Accepted' ? q : { ...q, status: 'Accepted' }
+      if (q.status !== 'Accepted') await store.setTicketStatus('quote', q, 'Accepted', user?.id)
+      const invoice = await store.convertQuoteToInvoice(quoteToConvert, linesOf(q.id), user?.id, data)
+      setConvertedInvoice({ id: invoice.id, number: invoice.number })
+      setConvertMsg(`Converted to invoice ${invoice.number}.`)
       await onReload()
     } catch (err) { onError(err.message || 'Conversion failed.') } finally { setBusy('') }
   }
@@ -140,6 +159,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
+        onConvert={editing && canConvert(editing) ? () => convert(editing, { fromForm: true }) : undefined}
       />
     )
   }
@@ -161,8 +181,15 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         <h2 style={{ margin: 0 }}>Quotes — Outstanding ({outstanding.length}) · ${outstandingValue.toFixed(2)}</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
       </div>
-      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Converting an Accepted quote creates the invoice — no retyping, and it can only be converted once.</p>
-      {convertMsg && <div className="success">{convertMsg}</div>}
+      <p className="muted small">Outstanding = Draft, Sent, or Accepted. Expires {settings?.quote_validity_days ?? 15} days after the issue date. Every open quote has a Convert to invoice button — converting an Accepted quote creates the invoice with no retyping, and it can only be converted once. A Draft or Sent quote asks first and is marked Accepted when converted. Quotes and invoices share one number sequence, so a number is never used twice.</p>
+      {convertMsg && (
+        <div className="success">
+          {convertMsg}{' '}
+          {convertedInvoice && onOpenInvoice && (
+            <button className="btn secondary" style={{ marginLeft: 8 }} onClick={() => onOpenInvoice(convertedInvoice)}>Open invoice {convertedInvoice.number}</button>
+          )}
+        </div>
+      )}
       <div className="row" style={{ marginTop: 12 }}>
         <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={outstandingOnly} onChange={(e) => setOutstandingOnly(e.target.checked)} /> Outstanding only</label>
         <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
@@ -213,10 +240,16 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                     {q.status === 'Draft' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Sent')}>Send</button>}
                     {q.status === 'Sent' && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Accepted')}>Accept</button>}
                     {['Draft', 'Sent'].includes(q.status) && <button className="btn secondary" disabled={busy === q.id} onClick={() => setStatus(q, 'Declined')}>Decline</button>}
-                    {q.status === 'Accepted' && !q.converted_invoice_id && (
+                    {canConvert(q) && (
                       <button className="btn" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
                     )}
-                    {q.status === 'Accepted' && q.converted_invoice_id && <span className="muted small">Converted</span>}
+                    {q.converted_invoice_id && (
+                      convertedInvoiceOf(q) && onOpenInvoice ? (
+                        <button className="btn secondary" onClick={() => onOpenInvoice(convertedInvoiceOf(q))}>Converted — {convertedInvoiceOf(q).number}</button>
+                      ) : (
+                        <span className="muted small">Converted</span>
+                      )
+                    )}
                     {isAdmin && q.status === 'Draft' && <button className="btn danger" onClick={() => handleDelete(q)}>Delete</button>}
                   </div>
                 </td>

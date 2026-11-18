@@ -12,9 +12,11 @@ create extension if not exists pg_trgm;
 -- ---------------------------------------------------------------------------
 -- Sequences: the authority for numbering. settings.next_* mirrors them for
 -- display / Admin editing; the sequence is what prevents duplicates.
+-- Quotes and invoices SHARE one sequence (ticket_number_seq) so a numeric
+-- value can never be issued as both a QT- and an INV- number. The old
+-- per-kind sequences are left in place, unused, by migration 006.
 -- ---------------------------------------------------------------------------
-create sequence if not exists invoice_number_seq start with 1001;
-create sequence if not exists quote_number_seq start with 1001;
+create sequence if not exists ticket_number_seq start with 1001;
 
 -- ---------------------------------------------------------------------------
 -- profiles table FIRST: is_admin()/is_active_user() below reference it, and
@@ -627,8 +629,10 @@ begin
     raise exception 'Not an active user';
   end if;
   select invoice_prefix into v_prefix from public.settings where id = 1;
-  v_num := nextval('invoice_number_seq');
-  update public.settings set next_invoice_number = v_num + 1 where id = 1;
+  -- Shared sequence: quotes and invoices draw from the same counter, so a
+  -- numeric value can never be issued as both a QT- and an INV- number.
+  v_num := nextval('ticket_number_seq');
+  update public.settings set next_invoice_number = v_num + 1, next_quote_number = v_num + 1 where id = 1;
   return v_prefix || v_num::text;
 end;
 $$;
@@ -646,14 +650,17 @@ begin
     raise exception 'Not an active user';
   end if;
   select quote_prefix into v_prefix from public.settings where id = 1;
-  v_num := nextval('quote_number_seq');
-  update public.settings set next_quote_number = v_num + 1 where id = 1;
+  -- Shared sequence: see next_invoice_number().
+  v_num := nextval('ticket_number_seq');
+  update public.settings set next_invoice_number = v_num + 1, next_quote_number = v_num + 1 where id = 1;
   return v_prefix || v_num::text;
 end;
 $$;
 
 -- Admin: move the next automatic number forward (never backward past a
 -- number already issued, and never below an existing invoice number).
+-- Both functions move the SAME shared sequence (and both settings mirrors),
+-- so setting the next invoice number also moves the next quote number.
 create or replace function public.admin_set_next_invoice_number(p_next integer)
 returns void
 language plpgsql security definer
@@ -664,8 +671,8 @@ begin
     raise exception 'Admin only';
   end if;
   if p_next < 1 then raise exception 'Next number must be >= 1'; end if;
-  perform setval('invoice_number_seq', p_next - 1, true);
-  update public.settings set next_invoice_number = p_next where id = 1;
+  perform setval('ticket_number_seq', p_next - 1, true);
+  update public.settings set next_invoice_number = p_next, next_quote_number = p_next where id = 1;
 end;
 $$;
 
@@ -680,8 +687,8 @@ begin
     raise exception 'Admin only';
   end if;
   if p_next < 1 then raise exception 'Next number must be >= 1'; end if;
-  perform setval('quote_number_seq', p_next - 1, true);
-  update public.settings set next_quote_number = p_next where id = 1;
+  perform setval('ticket_number_seq', p_next - 1, true);
+  update public.settings set next_invoice_number = p_next, next_quote_number = p_next where id = 1;
 end;
 $$;
 
@@ -710,6 +717,9 @@ begin
   if exists (select 1 from public.invoices where number = p_new_number and id <> p_invoice_id) then
     raise exception 'That invoice number is already in use';
   end if;
+  if exists (select 1 from public.quotes where number = p_new_number) then
+    raise exception 'That number is already in use as a quote number';
+  end if;
   update public.invoices
     set number = p_new_number,
         previous_numbers = array_append(coalesce(previous_numbers, '{}'), v_old)
@@ -718,9 +728,9 @@ begin
   v_digits := substring(p_new_number from '[0-9]+$');
   if v_digits is not null then
     v_num := v_digits::bigint;
-    if v_num >= (select last_value from invoice_number_seq) then
-      perform setval('invoice_number_seq', v_num, true);
-      update public.settings set next_invoice_number = v_num + 1 where id = 1;
+    if v_num >= (select last_value from ticket_number_seq) then
+      perform setval('ticket_number_seq', v_num, true);
+      update public.settings set next_invoice_number = v_num + 1, next_quote_number = v_num + 1 where id = 1;
     end if;
   end if;
 end;

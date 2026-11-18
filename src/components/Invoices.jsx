@@ -157,7 +157,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}) · ${openValue.toFixed(2)} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
-      <p className="muted small">Numbers are assigned atomically on save (INV-… from 1001). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      <p className="muted small">Numbers are assigned atomically on save from the sequence shared with quotes — a number is never used for both a quote and an invoice. Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
       {msg && <div className="success">{msg}</div>}
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>

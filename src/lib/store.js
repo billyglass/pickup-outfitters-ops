@@ -724,6 +724,19 @@ function localLoad() {
   }
 }
 
+function localNextTicketNumber() {
+  // Local mode mirrors the shared server sequence: quotes and invoices
+  // draw from ONE counter, seeded after the highest numeric suffix already
+  // used by either kind (or 1001 if there are no tickets yet), so a number
+  // can never be issued as both a QT- and an INV- number.
+  const all = [...lsRead(LS_QUOTES, []), ...lsRead(LS_INVOICES, [])]
+  const maxNum = all.reduce((m, t) => {
+    const n = parseInt(String(t.number || '').replace(/[^0-9]/g, ''), 10)
+    return Number.isFinite(n) ? Math.max(m, n) : m
+  }, 1000)
+  return maxNum + 1
+}
+
 function localSaveTicket(kind, ticket, lines, userId) {
   const key = kind === 'quote' ? LS_QUOTES : LS_INVOICES
   const rows = lsRead(key, [])
@@ -754,7 +767,7 @@ function localSaveTicket(kind, ticket, lines, userId) {
   }
   if (!saved.id) {
     saved.id = uid()
-    saved.number = `${kind === 'quote' ? 'QT-' : 'INV-'}${1001 + rows.length}`
+    saved.number = `${kind === 'quote' ? 'QT-' : 'INV-'}${localNextTicketNumber()}`
     saved.created_by = userId
     saved.created_at = saved.updated_at
     if (kind === 'invoice') saved.balance_due = totals.total
@@ -1052,7 +1065,7 @@ export const store = {
           ) || quote.vehicle_snapshot
         : quote.vehicle_snapshot
       const invoice = {
-        id: uid(), number: `INV-${1001 + lsRead(LS_INVOICES, []).length}`,
+        id: uid(), number: `INV-${localNextTicketNumber()}`,
         quote_id: quote.id, customer_id: quote.customer_id || null, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
         salesperson_id: quote.salesperson_id || userId, created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),

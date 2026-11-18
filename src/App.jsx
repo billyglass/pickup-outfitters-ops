@@ -540,7 +540,7 @@ export default function App() {
         )}
 
         {tab === 'quotes' && (
-          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} onOpened={() => setOpenQuoteId(null)} />
+          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => { setOpenInvoiceId(inv.id); setTab('invoices') }} />
         )}
         {tab === 'invoices' && (
           <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} />
@@ -578,8 +578,8 @@ export default function App() {
             <p className="muted">
               Tax rate: {data.settings ? `${(Number(data.settings.tax_rate) * 100).toFixed(2)}%` : '—'} ·
               Terms: {data.settings?.default_payment_terms || '—'} ·
-              Quote validity: {data.settings?.quote_validity_days || '—'} days ·
-              Invoice numbers start INV-1001 · Quote numbers start QT-1001.
+              Quote validity: {data.settings?.quote_validity_days || '—'} days ·<br />
+              Quotes and invoices share one number sequence (QT- / INV-…) — a number is never used for both a quote and an invoice.
             </p>
             <p className="muted">
               Numbering prefixes and next numbers live in the <code>settings</code> table and the

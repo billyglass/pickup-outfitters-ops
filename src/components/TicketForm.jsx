@@ -15,7 +15,7 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onPrint,
-  prefill, onDuplicate,
+  prefill, onDuplicate, onConvert,
 }) {
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? TAX_RATE)
@@ -431,9 +431,10 @@ export default function TicketForm({
         {!readOnly && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
         {initial && onPrint && <button className="btn secondary" type="button" onClick={onPrint}>Print</button>}
         {initial && onDuplicate && <button className="btn secondary" type="button" onClick={onDuplicate}>Duplicate</button>}
+        {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
         <button className="btn secondary" type="button" onClick={onCancel}>Close</button>
       </div>
-      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'QT-' : 'INV-'}… from 1001) — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
+      {!initial && <p className="muted small">Saving assigns the number automatically from the sequence shared with {isQuote ? 'invoices' : 'quotes'} ({isQuote ? 'QT-' : 'INV-'}…), so a number is never used twice — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
     </form>
   )
 }
