@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
 import { normalizeVin } from '../lib/csv.js'
+import { titleCaseName } from '../lib/names.js'
 import {
   computeTotals, money, lineTotal, laborAmount, emptyLine, normalizeLineForForm, addDays, todayStr,
   dueDateFor, termsDays, customerSnapshot,
@@ -241,7 +242,7 @@ export default function TicketForm({
           {walkIn ? (
             <>
               <label>Name *</label>
-              <input value={walkInFields.name} disabled={readOnly} autoComplete="off" placeholder="Buyer's name" onChange={(e) => { setWalkInFields((f) => ({ ...f, name: e.target.value })); setStatus('unsaved') }} />
+              <input value={walkInFields.name} disabled={readOnly} autoComplete="off" placeholder="Buyer's name" onChange={(e) => { setWalkInFields((f) => ({ ...f, name: e.target.value })); setStatus('unsaved') }} onBlur={(e) => { const v = titleCaseName(e.target.value); if (v !== e.target.value) { setWalkInFields((f) => ({ ...f, name: v })); setStatus('unsaved') } }} />
               <label>Phone *</label>
               <input value={walkInFields.phone} disabled={readOnly} autoComplete="off" placeholder="Phone number" onChange={(e) => { setWalkInFields((f) => ({ ...f, phone: e.target.value })); setStatus('unsaved') }} />
               <label>Email (optional)</label>

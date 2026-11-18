@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
+import { titleCaseName } from '../lib/names.js'
 
 const emptyContact = () => ({ name: '', phone: '', email: '', title: '', is_primary: false })
 const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', city: '', state: '', zip: '', is_primary: false })
@@ -70,7 +71,7 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
       <div className="form-grid">
         <div>
           <label htmlFor="cf-company">Company *</label>
-          <input id="cf-company" value={customer.company} onChange={(e) => markDirty({ company: e.target.value })} required />
+          <input id="cf-company" value={customer.company} onChange={(e) => markDirty({ company: e.target.value })} onBlur={(e) => { const v = titleCaseName(e.target.value); if (v !== e.target.value) markDirty({ company: v }) }} required />
         </div>
         <div>
           <label htmlFor="cf-terms">Payment terms</label>
@@ -124,7 +125,7 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
         <div key={i} className="form-grid" style={{ borderTop: '1px solid #eee', paddingTop: 4 }}>
           <div>
             <label>Name</label>
-            <input value={c.name || ''} onChange={(e) => updateContact(i, { name: e.target.value })} />
+            <input value={c.name || ''} onChange={(e) => updateContact(i, { name: e.target.value })} onBlur={(e) => { const v = titleCaseName(e.target.value); if (v !== (c.name || '')) updateContact(i, { name: v }) }} />
           </div>
           <div>
             <label>Title / role</label>

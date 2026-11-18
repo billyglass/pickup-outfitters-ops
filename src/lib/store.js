@@ -1,6 +1,7 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
 import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail } from './tickets.js'
+import { titleCaseName } from './names.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -89,7 +90,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
     const { data, error } = await supabase
       .from('customers')
       .update({
-        company: customer.company,
+        company: titleCaseName(customer.company),
         customer_type: customerTypeOf(customer),
         tax_exempt: customer.tax_exempt,
         tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
@@ -110,7 +111,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
   const { data, error } = await supabase
     .from('customers')
     .insert({
-      company: customer.company,
+      company: titleCaseName(customer.company),
       customer_type: customerTypeOf(customer),
       tax_exempt: customer.tax_exempt,
       tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
@@ -142,6 +143,9 @@ async function sbReplaceChildren(table, fk, customerId, rows) {
     .map((r) => {
       const o = {}
       for (const k of allowed) o[k] = k === 'is_primary' ? !!r[k] : r[k] || null
+      // Contact names are title-cased on save (same rule as the company
+      // name) — the import path does not go through here.
+      if (table === 'contacts' && o.name) o.name = titleCaseName(o.name)
       return o
     })
     .filter((o) =>
@@ -568,7 +572,7 @@ async function sbSaveWalkInAsCustomer(kind, ticket, customerType, userId) {
     throw new Error('This ticket already has a customer.')
   }
   const snap = ticket.customer_snapshot || {}
-  const name = (snap.contact_name || snap.company || '').trim()
+  const name = titleCaseName((snap.contact_name || snap.company || '').trim())
   if (!name) throw new Error('The walk-in ticket has no name to save as a customer.')
   const phone = (snap.phone || '').trim()
   const email = (snap.email || '').trim()
@@ -632,7 +636,7 @@ function localSaveWalkInAsCustomer(kind, ticket, customerType) {
     throw new Error('This ticket already has a customer.')
   }
   const snap = ticket.customer_snapshot || {}
-  const name = (snap.contact_name || snap.company || '').trim()
+  const name = titleCaseName((snap.contact_name || snap.company || '').trim())
   if (!name) throw new Error('The walk-in ticket has no name to save as a customer.')
   const phone = (snap.phone || '').trim()
   const email = (snap.email || '').trim()
@@ -946,12 +950,12 @@ export const store = {
         if (idx >= 0 && customers[idx].version !== customer.version) {
           throw new VersionConflict('This customer was changed by someone else. Reload and try again.')
         }
-        const saved = { ...customer, customer_type: customerTypeOf(customer), version: (customer.version || 1) + 1, updated_at: now }
+        const saved = { ...customer, company: titleCaseName(customer.company), customer_type: customerTypeOf(customer), version: (customer.version || 1) + 1, updated_at: now }
         customers[idx] = saved
         lsWrite(LS_CUSTOMERS, customers)
         return saved
       }
-      const saved = { ...customer, customer_type: customerTypeOf(customer), id: uid(), version: 1, created_at: now, updated_at: now }
+      const saved = { ...customer, company: titleCaseName(customer.company), customer_type: customerTypeOf(customer), id: uid(), version: 1, created_at: now, updated_at: now }
       lsWrite(LS_CUSTOMERS, [saved, ...customers])
       return saved
     }

@@ -1,4 +1,5 @@
 import { normalizeVin, normalizePhone } from './csv.js'
+import { titleCaseName } from './names.js'
 
 // Pure ticket math + snapshots, shared by TicketForm, print, and search.
 // Money: numeric(12,2) in the DB, half-up rounding to cents, per line.
@@ -352,7 +353,7 @@ export function walkInCustomerSnapshot(name, phone, email) {
   return {
     walk_in: true,
     company: null,
-    contact_name: (name || '').trim() || null,
+    contact_name: titleCaseName((name || '').trim()) || null,
     phone: (phone || '').trim() || null,
     email: (email || '').trim() || null,
     address: null,
