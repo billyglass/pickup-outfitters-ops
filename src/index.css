@@ -53,6 +53,9 @@ th { color: var(--grey-700); font-size: 12px; text-transform: uppercase; letter-
    sideways on narrow screens instead of crushing the columns. */
 .table-scroll { overflow-x: auto; margin-top: 12px; }
 table.list { min-width: 1180px; }
+/* Invoices has 10 columns plus a wide actions row — it gets more room
+   than Quotes so nothing squeezes. Narrow screens scroll sideways. */
+table.list.wide { min-width: 1360px; }
 table.list td.nowrap, table.list th.nowrap { white-space: nowrap; }
 table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 table.list td.customer { max-width: 240px; }

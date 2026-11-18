@@ -192,7 +192,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <label style={{ margin: 0 }}><input type="checkbox" style={{ width: 'auto' }} checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} /> Overdue only</label>
       </div>
       <div className="table-scroll">
-      <table className="list">
+      <table className="list wide">
         <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Issued</th><th className="nowrap">Due</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
         <tbody>
           {filtered.map((inv) => {
