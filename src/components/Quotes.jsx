@@ -237,20 +237,16 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       </div>
       <div className="table-scroll">
       <table className="list">
-        <thead><tr><th className="nowrap">Quote</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Date</th><th className="nowrap">Age</th><th className="nowrap">Expires</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th></th></tr></thead>
+        <thead><tr><th className="nowrap">Quote</th><th>Customer</th><th className="nowrap">Date</th><th className="nowrap">Age</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th></th></tr></thead>
         <tbody>
           {filtered.map((q) => {
-            const v = data.vehicles.find((x) => x.id === q.vehicle_id)
-            const vin = q.vehicle_snapshot?.vin || v?.vin || '—'
             const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10))
             return (
               <tr key={q.id}>
                 <td className="nowrap"><strong>{q.number}</strong></td>
                 <td className="customer" title={customerOf(q)}>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
-                <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small sub">VIN {vin}</div></td>
                 <td className="nowrap">{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
                 <td className="nowrap">{age ?? '—'}d</td>
-                <td className="nowrap">{q.expires_on || '—'}</td>
                 <td className="nowrap">{nameOf(q.salesperson_id)}</td>
                 <td className="nowrap">{q.status}</td>
                 <td className="num">${Number(q.total || 0).toFixed(2)}</td>
