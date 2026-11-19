@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
@@ -141,13 +141,15 @@ export default function App() {
     setTab('dashboard')
   }
 
-  async function runSearch(e) {
-    e?.preventDefault()
-    if (!searchQuery.trim()) return
+  async function runSearchFor(q) {
+    const query = String(q || '').trim()
+    if (!query) return
+    setSearchQuery(query)
     setSearching(true)
     setError('')
+    setSearchSuggestOpen(false)
     try {
-      setSearchResults(await globalSearch(searchQuery, data, searchFilters))
+      setSearchResults(await globalSearch(query, data, searchFilters))
       setTab('search')
     } catch (err) {
       setError(err.message || 'Search failed.')
@@ -155,6 +157,28 @@ export default function App() {
       setSearching(false)
     }
   }
+
+  async function runSearch(e) {
+    e?.preventDefault()
+    await runSearchFor(searchQuery)
+  }
+
+  // Dashboard search suggestions: customers matching what was typed,
+  // starting-with first — click one to search that customer (their
+  // quotes, invoices, and vehicles come up with them).
+  const [searchSuggestOpen, setSearchSuggestOpen] = useState(false)
+  const [searchHi, setSearchHi] = useState(0)
+  const searchSuggestions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (q.length < 2) return []
+    const scored = data.customers.map((c) => {
+      const names = [c.company, ...(data.contacts || []).filter((ct) => ct.customer_id === c.id).map((ct) => ct.name || '')]
+      const hay = names.map((n) => (n || '').toLowerCase())
+      return { c, starts: hay.some((n) => n.startsWith(q)), contains: hay.some((n) => n.includes(q)) }
+    }).filter((s) => s.contains)
+    scored.sort((a, b) => (b.starts - a.starts) || a.c.company.localeCompare(b.c.company))
+    return scored.map((s) => s.c).slice(0, 6)
+  }, [searchQuery, data.customers, data.contacts])
 
   async function handleDeleteCustomer(id, company) {
     // The edit form already asks "Delete this customer and all of its
@@ -262,13 +286,44 @@ export default function App() {
 
       <div className="container">
         <form onSubmit={runSearch} className="row" style={{ marginBottom: 16 }}>
-          <input
-            className="searchbox"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search customers, VIN (full / last 6 / last 8), fleet/unit, quote, invoice, PO…"
-            aria-label="Global search"
-          />
+          <div className="combo" style={{ flex: '1 1 520px', maxWidth: 560 }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setSearchSuggestOpen(false) }}>
+            <input
+              className="searchbox"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setSearchSuggestOpen(true); setSearchHi(0) }}
+              onFocus={() => { setSearchSuggestOpen(true); setSearchHi(0) }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setSearchSuggestOpen(true); setSearchHi((h) => Math.min(h + 1, searchSuggestions.length - 1)) }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setSearchHi((h) => Math.max(h - 1, 0)) }
+                else if (e.key === 'Enter' && searchSuggestOpen && searchSuggestions[searchHi]) { e.preventDefault(); runSearchFor(searchSuggestions[searchHi].company) }
+                else if (e.key === 'Escape') { setSearchSuggestOpen(false) }
+              }}
+              placeholder="Search customers, VIN (full / last 6 / last 8), fleet/unit, quote, invoice, PO…"
+              aria-label="Global search"
+              autoComplete="off"
+            />
+            {searchSuggestOpen && searchQuery.trim().length >= 2 && (
+              <div className="combo-list" role="listbox">
+                {searchSuggestions.map((c, i) => (
+                  <div
+                    key={c.id} role="option" aria-selected={i === searchHi}
+                    className={`combo-item${i === searchHi ? ' active' : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); runSearchFor(c.company) }}
+                    onMouseEnter={() => setSearchHi(i)}
+                  >
+                    <strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span>
+                    <span className="muted small"> · {c.payment_terms}{c.tax_exempt ? ' · Tax exempt' : ''}</span>
+                  </div>
+                ))}
+                <div
+                  className="combo-item"
+                  onMouseDown={(e) => { e.preventDefault(); runSearchFor(searchQuery) }}
+                >
+                  Search for “{searchQuery.trim()}” — all results
+                </div>
+              </div>
+            )}
+          </div>
           <button className="btn" type="submit" disabled={searching}>{searching ? 'Searching…' : 'Search'}</button>
         </form>
 
@@ -344,9 +399,12 @@ export default function App() {
             <h3>Tickets ({(searchResults.tickets || []).length})</h3>
             {(searchResults.tickets || []).length === 0 && <p className="muted">No quotes or invoices matched.</p>}
             {(searchResults.tickets || []).map((r) => (
-              <div key={`${r.type}-${r.ticket.id}`} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10)} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
-                <div className="muted small">Matched: {r.match}</div>
+              <div key={`${r.type}-${r.ticket.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <span>
+                  <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10)} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
+                  <div className="muted small">Matched: {r.match}</div>
+                </span>
+                <button className="btn secondary" onClick={() => { if (r.type === 'quote') { setOpenQuoteId(r.ticket.id); setTab('quotes') } else { setOpenInvoiceId(r.ticket.id); setTab('invoices') } }}>Open</button>
               </div>
             ))}
             <h3>Customers ({searchResults.customers.length})</h3>
@@ -360,8 +418,9 @@ export default function App() {
             <h3>Vehicles ({searchResults.vehicles.length})</h3>
             {searchResults.vehicles.length === 0 && <p className="muted">No vehicles matched. Try the full VIN, or just the last 6 or 8 characters.</p>}
             {searchResults.vehicles.map((v) => (
-              <div key={v.id} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · {customerName(v.customer_id)}
+              <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · {customerName(v.customer_id)}</span>
+                <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Open</button>
               </div>
             ))}
           </div>

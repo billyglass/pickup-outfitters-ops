@@ -829,15 +829,21 @@ export async function globalSearch(query, state, filters = {}) {
       c.company.toLowerCase().includes(lower) &&
       (!filters.customerType || customerTypeOf(c) === filters.customerType)
     )
+    // A customer-name match must also pull that customer's tickets and
+    // vehicles — otherwise searching a customer shows the customer but
+    // none of their quotes, invoices, or vehicles.
+    const matchedCustomerIds = new Set(customers.map((c) => c.id))
     const vehicles = state.vehicles.filter((v) =>
       vinMatches(v.vin) ||
-      String(v.fleet_unit || '').toLowerCase().includes(lower)
+      String(v.fleet_unit || '').toLowerCase().includes(lower) ||
+      matchedCustomerIds.has(v.customer_id)
     )
     const tickets = []
     const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
     for (const t of state.quotes) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('quote', t, 'VIN')
+      else if (t.customer_id && matchedCustomerIds.has(t.customer_id)) pushTicket('quote', t, 'Customer')
       else if (walkInMatches(t)) pushTicket('quote', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('quote', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower)) pushTicket('quote', t, 'Number / PO')
@@ -845,6 +851,7 @@ export async function globalSearch(query, state, filters = {}) {
     for (const t of state.invoices) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('invoice', t, 'VIN')
+      else if (t.customer_id && matchedCustomerIds.has(t.customer_id)) pushTicket('invoice', t, 'Customer')
       else if (walkInMatches(t)) pushTicket('invoice', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('invoice', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower) || (t.previous_numbers || []).some((n) => String(n).toLowerCase().includes(lower))) pushTicket('invoice', t, 'Number / PO')
@@ -924,6 +931,19 @@ export async function globalSearch(query, state, filters = {}) {
     for (const t of qByCust || []) pushTicket('quote', t, 'Contact')
     const { data: iByCust } = await supabase.from('invoices').select('*').in('customer_id', [...contactCustomerIds]).limit(20)
     for (const t of iByCust || []) pushTicket('invoice', t, 'Contact')
+  }
+  // Customer-name matches -> that customer's tickets and vehicles. This
+  // was missing: searching a customer showed the customer but none of
+  // their quotes, invoices, or vehicles.
+  const matchedCustomerIds = (customers.data || []).map((c) => c.id)
+  if (matchedCustomerIds.length) {
+    const { data: qByCust } = await supabase.from('quotes').select('*').in('customer_id', matchedCustomerIds).limit(20)
+    for (const t of qByCust || []) pushTicket('quote', t, 'Customer')
+    const { data: iByCust } = await supabase.from('invoices').select('*').in('customer_id', matchedCustomerIds).limit(20)
+    for (const t of iByCust || []) pushTicket('invoice', t, 'Customer')
+    const { data: vByCust } = await supabase.from('vehicles').select('*').in('customer_id', matchedCustomerIds).limit(20)
+    const seenVeh = new Set(vehicleRows.map((v) => v.id))
+    for (const v of vByCust || []) if (!seenVeh.has(v.id)) vehicleRows.push(v)
   }
   return {
     customers: customers.data || [],
