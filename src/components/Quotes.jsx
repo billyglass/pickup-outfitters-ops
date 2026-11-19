@@ -119,8 +119,9 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
 
   async function handleDelete(q) {
     if (!isAdmin) return
-    if (!window.confirm(`Delete quote ${q.number}? Open quotes only — this cannot be undone.`)) return
-    try { await store.deleteTicket('quote', q.id, true); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
+    // The form already asks "Delete this quote?" before calling this,
+    // so no second popup — one deliberate confirm is enough.
+    try { await store.deleteTicket('quote', q.id, true); setEditing(undefined); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
   // Fleet duplicate: opens a NEW Open quote prefilled from the source —
@@ -181,6 +182,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onConvert={editing && canConvert(editing) ? () => convert(editing, { fromForm: true }) : undefined}
+        onDelete={isAdmin && editing?.status === 'Open' ? () => handleDelete(editing) : undefined}
       />
     )
   }
@@ -269,7 +271,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                     {canConvert(q) && (
                       <button className="btn small" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
                     )}
-                    {isAdmin && q.status === 'Open' && <button className="btn danger small" onClick={() => handleDelete(q)}>Delete</button>}
+
                   </div>
                 </td>
               </tr>

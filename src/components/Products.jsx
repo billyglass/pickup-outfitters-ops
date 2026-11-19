@@ -8,14 +8,17 @@ import { money } from '../lib/tickets.js'
 // one-time lines are always allowed alongside it.
 export default function Products({ data, isAdmin, onReload, onError }) {
   const [editing, setEditing] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ part_number: '', name: '', description: '', default_price: 0, taxable: true, type: 'part', active: true })
 
   function startNew() {
     setEditing('new')
+    setConfirmDelete(false)
     setForm({ part_number: '', name: '', description: '', default_price: 0, taxable: true, type: 'part', active: true })
   }
   function startEdit(p) {
     setEditing(p.id)
+    setConfirmDelete(false)
     setForm({ ...p })
   }
   async function save(e) {
@@ -28,8 +31,9 @@ export default function Products({ data, isAdmin, onReload, onError }) {
     } catch (err) { onError(err.message || 'Save failed.') }
   }
   async function remove(p) {
-    if (!window.confirm(`Delete product "${p.name}"? It stays on existing tickets as a line item.`)) return
-    try { await store.deleteProduct(p.id, isAdmin); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
+    // The edit form already asks before calling this — one deliberate
+    // confirm is enough. It stays on existing tickets as a line item.
+    try { await store.deleteProduct(p.id, isAdmin); setEditing(null); setConfirmDelete(false); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
   return (
@@ -51,8 +55,21 @@ export default function Products({ data, isAdmin, onReload, onError }) {
           </div>
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn" type="submit">Save product</button>
-            <button className="btn secondary" type="button" onClick={() => setEditing(null)}>Cancel</button>
+            <button className="btn secondary" type="button" onClick={() => { setEditing(null); setConfirmDelete(false) }}>Cancel</button>
           </div>
+          {editing !== 'new' && (
+            <div className="danger-zone">
+              {!confirmDelete ? (
+                <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this product…</button>
+              ) : (
+                <span>
+                  Delete “{form.name}”? It stays on existing tickets as a line item.{' '}
+                  <button className="btn danger small" type="button" onClick={() => remove(data.products.find((p) => p.id === editing))}>Yes, delete product</button>{' '}
+                  <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                </span>
+              )}
+            </div>
+          )}
         </form>
       )}
       <table>
@@ -65,7 +82,7 @@ export default function Products({ data, isAdmin, onReload, onError }) {
               <td>{p.type}</td>
               <td>${money(p.default_price)}</td>
               <td>{p.taxable ? 't' : ''}</td>
-              <td><button className="btn secondary" onClick={() => startEdit(p)}>Edit</button>{' '}<button className="btn secondary" onClick={() => remove(p)}>Delete</button></td>
+              <td><button className="btn secondary" onClick={() => startEdit(p)}>Edit</button></td>
             </tr>
           ))}
         </tbody>

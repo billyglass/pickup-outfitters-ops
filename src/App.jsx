@@ -194,9 +194,11 @@ export default function App() {
   }
 
   async function handleDeleteVehicle(id) {
-    if (!window.confirm('Delete this vehicle? This cannot be undone. Admin only.')) return
+    // The edit form already asks "Delete this vehicle?" before calling
+    // this, so no second popup — one deliberate confirm is enough.
     try {
       await store.deleteVehicle(id)
+      setEditingVehicle(undefined)
       await loadData()
     } catch (err) {
       setError(err.message || 'Delete failed.')
@@ -581,8 +583,10 @@ export default function App() {
                 initial={editingVehicle}
                 customers={data.customers}
                 preselectedCustomerId={preselectedCustomerId}
+                isAdmin={isAdmin}
                 onSaved={async () => { setEditingVehicle(undefined); setPreselectedCustomerId(''); await loadData() }}
                 onCancel={() => { setEditingVehicle(undefined); setPreselectedCustomerId('') }}
+                onDelete={isAdmin && editingVehicle?.id ? () => handleDeleteVehicle(editingVehicle.id) : undefined}
               />
             ) : (
               <div className="card">
@@ -626,8 +630,7 @@ export default function App() {
                             </td>
                             <td>
                               <button className="btn secondary" onClick={() => setExpandedVehicleId(expanded ? null : v.id)}>{expanded ? 'Hide history' : 'History'}</button>{' '}
-                              <button className="btn secondary" onClick={() => setEditingVehicle(v)}>Edit</button>{' '}
-                              {isAdmin && <button className="btn secondary" onClick={() => handleDeleteVehicle(v.id)}>Delete</button>}
+                              <button className="btn secondary" onClick={() => setEditingVehicle(v)}>Edit</button>
                             </td>
                           </tr>
                           {expanded && (

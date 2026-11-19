@@ -4,7 +4,8 @@ import { normalizeVin } from '../lib/csv.js'
 import { customerTypeOf } from '../lib/tickets.js'
 import ComboBox from './ComboBox.jsx'
 
-export default function VehicleForm({ initial, customers, preselectedCustomerId, onSaved, onCancel }) {
+export default function VehicleForm({ initial, customers, preselectedCustomerId, isAdmin, onSaved, onCancel, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [vehicle, setVehicle] = useState(
     initial || { customer_id: preselectedCustomerId || '', vin: '', year: '', make: '', model: '', fleet_unit: '', color: '', notes: '' }
   )
@@ -134,6 +135,19 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
         <button className="btn" type="submit" disabled={status === 'saving'}>Save vehicle</button>
         <button className="btn secondary" type="button" onClick={onCancel}>Cancel</button>
       </div>
+      {initial?.id && isAdmin && onDelete && (
+        <div className="danger-zone">
+          {!confirmDelete ? (
+            <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this vehicle…</button>
+          ) : (
+            <span>
+              Delete this vehicle? This cannot be undone.{' '}
+              <button className="btn danger small" type="button" onClick={onDelete}>Yes, delete vehicle</button>{' '}
+              <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+            </span>
+          )}
+        </div>
+      )}
     </form>
   )
 }
