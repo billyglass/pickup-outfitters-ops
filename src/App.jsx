@@ -6,6 +6,7 @@ import { customerTypeOf, ticketCustomerName, fmtDate } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
+import CustomerNotes from './components/CustomerNotes.jsx'
 import CustomerPhotos from './components/CustomerPhotos.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
 import ImportCustomers from './components/ImportCustomers.jsx'
@@ -530,7 +531,9 @@ export default function App() {
                   {selectedCustomer.tax_exempt_doc_note ? ` · ${selectedCustomer.tax_exempt_doc_note}` : ''}
                 </p>
                 {selectedCustomer.po_requirements && <p><strong>PO requirements:</strong> {selectedCustomer.po_requirements}</p>}
-                {selectedCustomer.notes && <p><strong>Notes:</strong> {selectedCustomer.notes}</p>}
+              </div>
+              <CustomerNotes key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} profiles={data.profiles} />
+              <div className="card">
                 <h3>Contacts</h3>
                 {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).map((c) => (
                   <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {c.phone || '—'} · {c.email || '—'}</div>

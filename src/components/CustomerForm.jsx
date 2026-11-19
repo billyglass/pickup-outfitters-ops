@@ -8,7 +8,7 @@ const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', cit
 export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, isAdmin, onSaved, onCancel, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [customer, setCustomer] = useState(
-    initial || { company: '', customer_type: 'Retail', flag: '', flag_note: '', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
+    initial || { company: '', customer_type: 'Retail', flag: '', flag_note: '', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', po_requirements: '' }
   )
   const [contacts, setContacts] = useState(
     initialContacts?.length ? initialContacts : [emptyContact()]
@@ -134,11 +134,6 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
         <label htmlFor="cf-po">Purchase order requirements</label>
         <input id="cf-po" value={customer.po_requirements || ''} onChange={(e) => markDirty({ po_requirements: e.target.value })} placeholder="e.g. PO required on every invoice" />
       </div>
-      <div>
-        <label htmlFor="cf-notes">Customer notes</label>
-        <textarea id="cf-notes" rows={3} value={customer.notes || ''} onChange={(e) => markDirty({ notes: e.target.value })} />
-      </div>
-
       <h3>Contacts</h3>
       {contacts.map((c, i) => (
         <div key={i} className="form-grid" style={{ borderTop: '1px solid #eee', paddingTop: 4 }}>

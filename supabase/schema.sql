@@ -555,6 +555,22 @@ create index if not exists customer_photos_customer_idx
   on public.customer_photos (customer_id);
 
 -- ---------------------------------------------------------------------------
+-- customer_notes — dated running log on a customer record (mini-CRM).
+-- One row per note; the app shows newest first. The old single
+-- customers.notes box was replaced by this log (migration 014 imports
+-- whatever it held). Deleting the customer deletes its notes.
+-- ---------------------------------------------------------------------------
+create table if not exists public.customer_notes (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers (id) on delete cascade,
+  body text not null,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists customer_notes_customer_idx
+  on public.customer_notes (customer_id, created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- Triggers: updated_at / version bump, and audit logging.
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -789,6 +805,7 @@ alter table public.installer_job_links enable row level security;
 alter table public.audit_log enable row level security;
 alter table public.attachments enable row level security;
 alter table public.customer_photos enable row level security;
+alter table public.customer_notes enable row level security;
 
 -- profiles: read own row, or any row if Admin. Insert own row (first setup)
 -- or Admin. Update own name/email, or Admin for everything (guard trigger
@@ -1005,6 +1022,22 @@ create policy "customer_photos update active" on public.customer_photos for upda
   using (public.is_active_user()) with check (public.is_active_user());
 drop policy if exists "customer_photos delete active" on public.customer_photos;
 create policy "customer_photos delete active" on public.customer_photos for delete
+  using (public.is_active_user());
+
+-- customer_notes: any active user can read/insert/update/delete. A note
+-- is not a business record, so delete is NOT Admin-only here (the app
+-- still asks for a confirm first) — same as customer_photos.
+drop policy if exists "customer_notes read active" on public.customer_notes;
+create policy "customer_notes read active" on public.customer_notes for select
+  using (public.is_active_user());
+drop policy if exists "customer_notes insert active" on public.customer_notes;
+create policy "customer_notes insert active" on public.customer_notes for insert
+  with check (public.is_active_user());
+drop policy if exists "customer_notes update active" on public.customer_notes;
+create policy "customer_notes update active" on public.customer_notes for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "customer_notes delete active" on public.customer_notes;
+create policy "customer_notes delete active" on public.customer_notes for delete
   using (public.is_active_user());
 
 -- Private storage bucket for customer photos + its object policies.

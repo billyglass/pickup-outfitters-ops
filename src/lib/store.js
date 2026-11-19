@@ -8,6 +8,7 @@ import { titleCaseName } from './names.js'
 //   - Local mode (no env vars): localStorage, for trying the UI before
 //     Supabase is connected. Shows a banner; do not use for real data.
 const LS_CUSTOMERS = 'po_ops_customers_v1'
+const LS_CUSTOMER_NOTES = 'po_ops_customer_notes_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
 export class VersionConflict extends Error {
@@ -98,7 +99,6 @@ async function sbSaveCustomer(customer, contacts, addresses) {
         tax_exempt: customer.tax_exempt,
         tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
         payment_terms: customer.payment_terms || 'Net 30',
-        notes: customer.notes || null,
         po_requirements: customer.po_requirements || null,
       })
       .eq('id', customer.id)
@@ -122,7 +122,6 @@ async function sbSaveCustomer(customer, contacts, addresses) {
       tax_exempt: customer.tax_exempt,
       tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
       payment_terms: customer.payment_terms || 'Net 30',
-      notes: customer.notes || null,
       po_requirements: customer.po_requirements || null,
     })
     .select()
@@ -615,12 +614,15 @@ async function sbSaveWalkInAsCustomer(kind, ticket, customerType, userId) {
         customer_type: type,
         tax_exempt: false,
         payment_terms: 'Net 30',
-        notes: `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`,
         po_requirements: '',
       },
       [{ name, phone: phone || null, email: email || null, title: '', is_primary: true }],
       []
     )
+    // The old customers.notes box is gone — keep the "created from
+    // walk-in" trail as the customer's first log entry instead. Best
+    // effort: never fail the save over a note.
+    try { await sbAddNote(customer.id, `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`, null) } catch (err) { /* informational only */ }
   }
   const snapshot = customerSnapshot(
     customer,
@@ -672,10 +674,12 @@ function localSaveWalkInAsCustomer(kind, ticket, customerType) {
     customer = {
       id: uid(), company: name, customer_type: type, tax_exempt: false,
       payment_terms: 'Net 30',
-      notes: `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`,
       version: 1, created_at: now, updated_at: now,
     }
     lsWrite(LS_CUSTOMERS, [customer, ...customers])
+    // The old customers.notes box is gone — keep the "created from
+    // walk-in" trail as the customer's first log entry instead.
+    try { localAddNote(customer.id, `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`, null) } catch (err) { /* informational only */ }
   }
   const snapshot = {
     company: customer.company, contact_name: name, phone: phone || null,
@@ -1091,6 +1095,54 @@ async function sbDeletePhoto(photo) {
   if (error) throw error
 }
 
+// --- Customer notes log (mini-CRM) ---
+// Dated running log on a customer record, newest first. The old single
+// customers.notes box was replaced by this log (migration 014).
+async function sbListNotes(customerId) {
+  const { data, error } = await supabase
+    .from('customer_notes')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+async function sbAddNote(customerId, body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write the note first.')
+  const { data, error } = await supabase
+    .from('customer_notes')
+    .insert({ customer_id: customerId, body: text, created_by: userId || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+async function sbDeleteNote(noteId) {
+  const { error } = await supabase.from('customer_notes').delete().eq('id', noteId)
+  if (error) throw error
+}
+
+function localListNotes(customerId) {
+  return lsRead(LS_CUSTOMER_NOTES, [])
+    .filter((n) => n.customer_id === customerId)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+}
+
+function localAddNote(customerId, body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write the note first.')
+  const note = { id: uid(), customer_id: customerId, body: text, created_by: userId || null, created_at: new Date().toISOString() }
+  lsWrite(LS_CUSTOMER_NOTES, [note, ...lsRead(LS_CUSTOMER_NOTES, [])])
+  return note
+}
+
+function localDeleteNote(noteId) {
+  lsWrite(LS_CUSTOMER_NOTES, lsRead(LS_CUSTOMER_NOTES, []).filter((n) => n.id !== noteId))
+}
+
 export const store = {
   configured: supabaseConfigured,
 
@@ -1100,19 +1152,22 @@ export const store = {
 
   async saveCustomer(customer, contacts, addresses) {
     if (!supabaseConfigured) {
+      // The old single notes box is gone — notes live in the log now, so
+      // never persist a `notes` value on the customer record itself.
+      const { notes: _oldNotes, ...customerNoNotes } = customer
       const customers = lsRead(LS_CUSTOMERS, [])
       const now = new Date().toISOString()
-      if (customer.id) {
-        const idx = customers.findIndex((c) => c.id === customer.id)
-        if (idx >= 0 && customers[idx].version !== customer.version) {
+      if (customerNoNotes.id) {
+        const idx = customers.findIndex((c) => c.id === customerNoNotes.id)
+        if (idx >= 0 && customers[idx].version !== customerNoNotes.version) {
           throw new VersionConflict('This customer was changed by someone else. Reload and try again.')
         }
-        const saved = { ...customer, company: titleCaseName(customer.company), customer_type: customerTypeOf(customer), version: (customer.version || 1) + 1, updated_at: now }
+        const saved = { ...customerNoNotes, company: titleCaseName(customerNoNotes.company), customer_type: customerTypeOf(customerNoNotes), version: (customerNoNotes.version || 1) + 1, updated_at: now }
         customers[idx] = saved
         lsWrite(LS_CUSTOMERS, customers)
         return saved
       }
-      const saved = { ...customer, company: titleCaseName(customer.company), customer_type: customerTypeOf(customer), id: uid(), version: 1, created_at: now, updated_at: now }
+      const saved = { ...customerNoNotes, company: titleCaseName(customerNoNotes.company), customer_type: customerTypeOf(customerNoNotes), id: uid(), version: 1, created_at: now, updated_at: now }
       lsWrite(LS_CUSTOMERS, [saved, ...customers])
       return saved
     }
@@ -1185,6 +1240,23 @@ export const store = {
   async deletePhoto(photo) {
     if (!supabaseConfigured) throw new Error('Photos are available when connected to the live database.')
     return sbDeletePhoto(photo)
+  },
+
+  // --- Customer notes log (mini-CRM) ---
+  // Local mode keeps notes in localStorage, same shape as Supabase rows.
+  async listNotes(customerId) {
+    if (!supabaseConfigured) return localListNotes(customerId)
+    return sbListNotes(customerId)
+  },
+
+  async addNote(customerId, body, userId) {
+    if (!supabaseConfigured) return localAddNote(customerId, body, userId)
+    return sbAddNote(customerId, body, userId)
+  },
+
+  async deleteNote(noteId) {
+    if (!supabaseConfigured) return localDeleteNote(noteId)
+    return sbDeleteNote(noteId)
   },
 
   // --- Tickets ---
@@ -1326,7 +1398,7 @@ export const store = {
       const now = new Date().toISOString()
       const created = rows.map((r) => ({
         id: uid(), company: r.Company, customer_type: 'Retail', tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
-        payment_terms: r.Terms || 'Net 30', notes: '', po_requirements: '',
+        payment_terms: r.Terms || 'Net 30', po_requirements: '',
         version: 1, created_at: now, updated_at: now,
       }))
       lsWrite(LS_CUSTOMERS, [...created, ...customers])
