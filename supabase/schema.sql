@@ -635,7 +635,14 @@ begin
   end if;
   select invoice_prefix into v_prefix from public.settings where id = 1;
   -- Separate system: invoices draw from invoice_number_seq only.
-  v_num := nextval('invoice_number_seq');
+  -- Loop: a manually-set number may sit ahead of the sequence, so skip
+  -- any candidate that is already on an invoice.
+  loop
+    v_num := nextval('invoice_number_seq');
+    exit when not exists (
+      select 1 from public.invoices where number = v_prefix || v_num::text
+    );
+  end loop;
   update public.settings set next_invoice_number = v_num + 1 where id = 1;
   return v_prefix || v_num::text;
 end;
@@ -697,9 +704,10 @@ end;
 $$;
 
 -- Admin manual renumber: old number is kept in previous_numbers (searchable),
--- other records are never renumbered, and if the manual number is at/above
--- the sequence, the sequence is advanced past it so future automatic
--- numbering cannot collide with it.
+-- other records are never renumbered, and the auto-number sequence is NOT
+-- touched — the next new invoice still gets the next sequence number.
+-- If the sequence later reaches a manually-set number,
+-- next_invoice_number() skips it (see above).
 create or replace function public.admin_renumber_invoice(p_invoice_id uuid, p_new_number text)
 returns void
 language plpgsql security definer
@@ -707,8 +715,6 @@ set search_path = public
 as $$
 declare
   v_old text;
-  v_digits text;
-  v_num bigint;
 begin
   if not public.is_admin() then
     raise exception 'Admin only';
@@ -727,15 +733,11 @@ begin
     set number = p_new_number,
         previous_numbers = array_append(coalesce(previous_numbers, '{}'), v_old)
     where id = p_invoice_id;
-  -- Advance the invoice sequence past a manual number so it can't collide later.
-  v_digits := substring(p_new_number from '[0-9]+$');
-  if v_digits is not null then
-    v_num := v_digits::bigint;
-    if v_num >= (select last_value from invoice_number_seq) then
-      perform setval('invoice_number_seq', v_num, true);
-      update public.settings set next_invoice_number = v_num + 1 where id = 1;
-    end if;
-  end if;
+  -- The invoice sequence is deliberately NOT advanced here. A manual
+  -- number never moves the next automatic number; if the sequence later
+  -- reaches a manually-set number, next_invoice_number() skips it.
+  -- (The UPDATE above fires the audit trigger, so the renumber — old
+  -- number to new number — is recorded in audit_log automatically.)
 end;
 $$;
 

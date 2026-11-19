@@ -731,6 +731,40 @@ function localLoad() {
   }
 }
 
+// Admin renumber input: "105" -> "INV-105", "inv-105" -> "INV-105",
+// "INV-105" stays. Anything else (letters, a QT- prefix, a blank) is
+// rejected with a plain-language error before anything is written.
+export function normalizeInvoiceNumber(input) {
+  const raw = String(input || '').trim().toUpperCase().replace(/\s+/g, '')
+  if (!raw) throw new Error('Enter a new invoice number.')
+  const digits = /^\d+$/.test(raw) ? raw : /^INV-?(\d+)$/.exec(raw)?.[1]
+  if (!digits) throw new Error('Enter a number like INV-105, or just the digits (105).')
+  return `INV-${parseInt(digits, 10)}`
+}
+
+// Local-mode renumber: same rules as the server function — Admin-only is
+// enforced by the caller, duplicate target is refused, the old number is
+// kept in previous_numbers (searchable). The local next-number counter
+// derives from the highest number already in use, so a manual number can
+// never collide with a later automatic one.
+function localRenameInvoice(id, target) {
+  const rows = lsRead(LS_INVOICES, [])
+  const idx = rows.findIndex((r) => r.id === id)
+  if (idx < 0) throw new Error('Invoice not found.')
+  const current = rows[idx]
+  if (current.number === target) return current
+  if (rows.some((r) => r.id !== id && r.number === target)) {
+    throw new Error(`${target} is already used by another invoice.`)
+  }
+  rows[idx] = {
+    ...current,
+    number: target,
+    previous_numbers: [...(current.previous_numbers || []), current.number],
+  }
+  lsWrite(LS_INVOICES, rows)
+  return rows[idx]
+}
+
 function localNextNumber(kind) {
   // Local mode mirrors the separate server sequences: quotes draw from
   // their own counter (QT-A…), invoices from their own (INV-…), each
@@ -1130,6 +1164,33 @@ export const store = {
     }
     const { error } = await supabase.from(ticketTable(kind)).delete().eq('id', id)
     if (error) throw error
+  },
+
+  // Admin-only manual invoice renumber. Renames ONE invoice and nothing
+  // else: no other invoice's number changes, the auto-number sequence is
+  // not touched (the next new invoice still gets the next sequence
+  // number), and the old number is kept in previous_numbers so the
+  // invoice is still found by searching it. The audit trigger logs the
+  // UPDATE (old number -> new number) in audit_log automatically.
+  // Returns the updated invoice row. Not a ticket edit — totals, status,
+  // dates, lines, and snapshots are untouched.
+  async renameInvoice(id, newNumber, isAdmin) {
+    if (!isAdmin) throw new Error('Only an Admin can change an invoice number.')
+    const target = normalizeInvoiceNumber(newNumber)
+    if (!supabaseConfigured) return localRenameInvoice(id, target)
+    const { data: current, error: curErr } = await supabase
+      .from('invoices').select('id, number, previous_numbers').eq('id', id).single()
+    if (curErr || !current) throw new Error('Invoice not found.')
+    if (current.number === target) return current
+    const { data: clash } = await supabase
+      .from('invoices').select('id').eq('number', target).neq('id', id).limit(1)
+    if (clash?.length) throw new Error(`${target} is already used by another invoice.`)
+    const { error } = await supabase.rpc('admin_renumber_invoice', { p_invoice_id: id, p_new_number: target })
+    if (error) throw error
+    const { data: updated, error: updErr } = await supabase
+      .from('invoices').select('*').eq('id', id).single()
+    if (updErr || !updated) throw updErr || new Error('Renumber succeeded but the invoice could not be reloaded.')
+    return updated
   },
 
   async saveProduct(product, isAdmin) {

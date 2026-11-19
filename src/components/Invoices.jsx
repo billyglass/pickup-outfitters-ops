@@ -75,8 +75,9 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
 
   async function handleDelete(inv) {
     if (!isAdmin) return
-    // The form already asks "Delete this draft invoice?" before calling
-    // this, so no second popup — one deliberate confirm is enough.
+    // Admin only, any status — the form already asks before calling this,
+    // so no second popup. Deleting removes just this invoice; no other
+    // invoice's number changes and the deleted number is never reused.
     try { await store.deleteTicket('invoice', inv.id, true); setEditing(undefined); await onReload() } catch (err) { onError(err.message || 'Delete failed.') }
   }
 
@@ -138,7 +139,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         onCancel={() => setEditing(undefined)}
         onPrint={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
-        onDelete={isAdmin && editing?.status === 'Draft' ? () => handleDelete(editing) : undefined}
+        onDelete={isAdmin && editing ? () => handleDelete(editing) : undefined}
+        onRenumbered={async () => { await onReload() }}
       />
     )
   }
@@ -160,7 +162,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}) · ${openValue.toFixed(2)} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
-      <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
       {msg && <div className="success">{msg}</div>}
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>

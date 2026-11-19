@@ -15,9 +15,16 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onPrint,
-  prefill, onDuplicate, onConvert, onDelete,
+  prefill, onDuplicate, onConvert, onDelete, onRenumbered,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Admin renumber (invoices only, existing invoice only): a separate
+  // action from saving — it renames this one invoice and touches nothing
+  // else (no other number, no totals, no status, no dates).
+  const [renumberValue, setRenumberValue] = useState(() => initial?.number || '')
+  const [renumberMsg, setRenumberMsg] = useState('')
+  const [renumberErr, setRenumberErr] = useState('')
+  const [renumberBusy, setRenumberBusy] = useState(false)
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? TAX_RATE)
   const [ticket, setTicket] = useState(() => {
@@ -179,6 +186,26 @@ export default function TicketForm({
     setStatus('unsaved')
   }
 
+  async function applyRenumber() {
+    setRenumberErr('')
+    setRenumberMsg('')
+    setRenumberBusy(true)
+    try {
+      const updated = await store.renameInvoice(initial.id, renumberValue, true)
+      // Show the new number in the form right away; the ticket itself is
+      // untouched — renumber is not an edit, so the saved/unsaved state
+      // does not change.
+      setTicket((t) => ({ ...t, number: updated.number, previous_numbers: updated.previous_numbers || t.previous_numbers || [] }))
+      setRenumberValue(updated.number)
+      setRenumberMsg(`Renumbered to ${updated.number}. The old number is still searchable.`)
+      if (onRenumbered) await onRenumbered()
+    } catch (err) {
+      setRenumberErr(err.message || 'Renumber failed.')
+    } finally {
+      setRenumberBusy(false)
+    }
+  }
+
   async function save(e) {
     e?.preventDefault()
     if (walkIn) {
@@ -250,7 +277,7 @@ export default function TicketForm({
     <form className="card ticket-form" onSubmit={save}>
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
-          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (copy of ${prefill.sourceLabel})` : `New ${isQuote ? 'quote' : 'invoice'}`}
+          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${ticket.number || initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (copy of ${prefill.sourceLabel})` : `New ${isQuote ? 'quote' : 'invoice'}`}
           {initial && <span className="pill" style={{ marginLeft: 8 }}>{initial.status}</span>}
           {prefill && <span className="pill" style={{ marginLeft: 8 }}>New — number assigned on save</span>}
         </h2>
@@ -258,6 +285,29 @@ export default function TicketForm({
           {status === 'saved' ? '● Saved' : status === 'saving' ? '● Saving…' : '● Unsaved changes'}
         </span>
       </div>
+      {!isQuote && initial && isAdmin && (
+        <div style={{ marginTop: 12 }}>
+          <div className="row" style={{ alignItems: 'flex-end' }}>
+            <div>
+              <label>Invoice number (Admin only)</label>
+              <input
+                value={renumberValue} disabled={renumberBusy} autoComplete="off"
+                placeholder="INV-105 or just 105" style={{ maxWidth: 170 }}
+                onChange={(e) => { setRenumberValue(e.target.value); setRenumberMsg(''); setRenumberErr('') }}
+              />
+            </div>
+            <button type="button" className="btn secondary" disabled={renumberBusy || !renumberValue.trim() || renumberValue.trim().toUpperCase().replace(/\s+/g, '') === (ticket.number || '').toUpperCase()} onClick={applyRenumber}>
+              {renumberBusy ? 'Renaming…' : 'Apply new number'}
+            </button>
+          </div>
+          <p className="muted small" style={{ marginTop: 4 }}>
+            Renames this invoice only — other invoices keep their numbers and the next automatic number is not affected. The old number stays searchable.
+            {ticket.previous_numbers?.length ? ` Previously: ${ticket.previous_numbers.join(', ')}.` : ''}
+          </p>
+          {renumberMsg && <p className="muted small" style={{ marginTop: 4 }}>{renumberMsg}</p>}
+          {renumberErr && <div className="error">{renumberErr}</div>}
+        </div>
+      )}
       {conflict && <div className="error">{conflict} <button type="button" className="btn secondary" onClick={onCancel}>Reload</button></div>}
       {error && <div className="error">{error}</div>}
       {prefill && (
@@ -522,10 +572,14 @@ export default function TicketForm({
       {initial && onDelete && (
         <div className="danger-zone">
           {!confirmDelete ? (
-            <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this {isQuote ? 'quote' : 'draft invoice'}…</button>
+            <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(true)}>Delete this {isQuote ? 'quote' : 'invoice'}…</button>
           ) : (
             <span>
-              Delete this {isQuote ? 'quote' : 'draft invoice'}? This cannot be undone.{' '}
+              {!isQuote && ticket.status !== 'Draft' ? (
+                <>Delete {ticket.number}? This invoice is {ticket.status}{Number(ticket.balance_due) > 0 ? <> with a balance due of ${money(Number(ticket.balance_due))}</> : ''} — deleting removes it from accounts receivable and cannot be undone. No other invoice's number changes.</>
+              ) : (
+                <>Delete this {isQuote ? 'quote' : 'draft invoice'}? This cannot be undone. No other invoice's number changes.</>
+              )}{' '}
               <button className="btn danger small" type="button" onClick={onDelete}>Yes, delete</button>{' '}
               <button className="btn secondary small" type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
             </span>
