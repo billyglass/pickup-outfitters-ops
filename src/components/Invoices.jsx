@@ -3,6 +3,7 @@ import { store } from '../lib/store.js'
 import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
+import ComboBox from './ComboBox.jsx'
 import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
@@ -174,11 +175,18 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         </div>
       )}
       <div className="row filters" style={{ marginTop: 12 }}>
-        <select value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}>
-          <option value="">All customers</option>
-          <option value="walk-in">Walk-in (no customer record)</option>
-          {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
-        </select>
+        <ComboBox
+          value={fCustomer}
+          onChange={setFCustomer}
+          placeholder="Search customers…"
+          ariaLabel="Filter by customer"
+          emptyText="No customers match that — try fewer letters."
+          options={[
+            { value: '', label: 'All customers' },
+            { value: 'walk-in', label: 'Walk-in (no customer record)' },
+            ...data.customers.map((c) => ({ value: c.id, label: c.company, tag: customerTypeOf(c) })),
+          ]}
+        />
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
           {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

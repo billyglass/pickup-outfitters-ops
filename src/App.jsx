@@ -11,6 +11,7 @@ import ImportCustomers from './components/ImportCustomers.jsx'
 import Quotes from './components/Quotes.jsx'
 import Invoices from './components/Invoices.jsx'
 import Products from './components/Products.jsx'
+import ComboBox from './components/ComboBox.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -305,7 +306,7 @@ export default function App() {
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Search results for “{searchQuery}”</h2>
             <p className="muted small">Searches inside quotes and invoices too — VIN (full / last 6 / last 8), part numbers, line-item descriptions, numbers, and PO numbers.</p>
-            <div className="row" style={{ marginBottom: 12 }}>
+            <div className="row filters" style={{ marginBottom: 12 }}>
               <select value={searchFilters.type} onChange={(e) => setSearchFilters({ ...searchFilters, type: e.target.value })}>
                 <option value="">Quotes + invoices</option>
                 <option value="quote">Quotes only</option>
@@ -315,11 +316,18 @@ export default function App() {
                 <option value="">Any status</option>
                 {['Open', 'Lost', 'Issued', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
               </select>
-              <select value={searchFilters.customerId} onChange={(e) => setSearchFilters({ ...searchFilters, customerId: e.target.value })}>
-                <option value="">Any customer</option>
-                <option value="walk-in">Walk-in (no customer record)</option>
-                {data.customers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
-              </select>
+              <ComboBox
+                value={searchFilters.customerId}
+                onChange={(v) => setSearchFilters({ ...searchFilters, customerId: v })}
+                placeholder="Search customers…"
+                ariaLabel="Filter search by customer"
+                emptyText="No customers match that — try fewer letters."
+                options={[
+                  { value: '', label: 'Any customer' },
+                  { value: 'walk-in', label: 'Walk-in (no customer record)' },
+                  ...data.customers.map((c) => ({ value: c.id, label: c.company, tag: customerTypeOf(c) })),
+                ]}
+              />
               <select value={searchFilters.customerType} onChange={(e) => setSearchFilters({ ...searchFilters, customerType: e.target.value })}>
                 <option value="">Retail + Fleet</option>
                 <option value="Retail">Retail only</option>

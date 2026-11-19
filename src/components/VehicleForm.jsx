@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
 import { normalizeVin } from '../lib/csv.js'
+import { customerTypeOf } from '../lib/tickets.js'
+import ComboBox from './ComboBox.jsx'
 
 export default function VehicleForm({ initial, customers, preselectedCustomerId, onSaved, onCancel }) {
   const [vehicle, setVehicle] = useState(
@@ -73,12 +75,17 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
       <div className="form-grid">
         <div>
           <label htmlFor="vf-customer">Customer (optional — blank for walk-in vehicles)</label>
-          <select id="vf-customer" value={vehicle.customer_id || ''} onChange={(e) => markDirty({ customer_id: e.target.value || null })}>
-            <option value="">— No customer (walk-in vehicle) —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>{c.company}</option>
-            ))}
-          </select>
+          <ComboBox
+            value={vehicle.customer_id || ''}
+            onChange={(v) => markDirty({ customer_id: v || null })}
+            placeholder="Type a customer name…"
+            ariaLabel="Customer"
+            emptyText="No customers match that — try fewer letters."
+            options={[
+              { value: '', label: '— No customer (walk-in vehicle) —' },
+              ...customers.map((c) => ({ value: c.id, label: c.company, tag: customerTypeOf(c) })),
+            ]}
+          />
         </div>
         <div>
           <label htmlFor="vf-vin">VIN</label>

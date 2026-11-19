@@ -78,6 +78,7 @@ table.list td .sub { white-space: nowrap; }
 .danger-zone { margin-top: 28px; padding-top: 14px; border-top: 1px solid #f5c6cb; font-size: 13px; color: var(--grey-700); }
 /* Filter rows: selects/inputs size to their content, not full width. */
 .row.filters select, .row.filters input[type="date"] { width: auto; }
+.row.filters .combo { flex: 1 1 200px; max-width: 300px; }
 .row.filters input[type="checkbox"] { width: auto; }
 tr:hover td { background: #fafafa; }
 .muted { color: var(--grey-700); font-size: 13px; }
