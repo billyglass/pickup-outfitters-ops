@@ -116,6 +116,17 @@ export function dueDateFor(issueDate, terms) {
   return addDays(issueDate, termsDays(terms))
 }
 
+// Display a stored YYYY-MM-DD date (or ISO timestamp) as M/D/YYYY —
+// e.g. 2026-11-18 -> 11/18/2026. Storage stays ISO; this is display
+// only. Date <input> controls are untouched (the browser renders those
+// in the user's locale format already).
+export function fmtDate(iso) {
+  const s = String(iso || '').slice(0, 10)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return '—'
+  return `${Number(m[2])}/${Number(m[3])}/${m[1]}`
+}
+
 export function ageDays(dateStr) {
   if (!dateStr) return null
   const d = new Date(`${dateStr}T12:00:00`)

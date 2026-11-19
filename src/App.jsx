@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
@@ -383,7 +383,7 @@ export default function App() {
             <div className="card">
               <div className="row-between">
                 <h2 style={{ margin: 0 }}>Today's tickets ({todaysTickets.length})</h2>
-                <span className="muted small">{todayStr}</span>
+                <span className="muted small">{fmtDate(todayStr)}</span>
               </div>
               <p className="muted small">Quotes and invoices created today — newest first. Click Open to pick one up.</p>
               {todaysTickets.length === 0 && <p className="muted">No tickets created today yet.</p>}
@@ -403,7 +403,7 @@ export default function App() {
               {chaseQuotes.length === 0 && <p className="muted">No open quotes. Nothing to chase.</p>}
               {chaseQuotes.slice(0, 8).map((q) => (
                 <div key={q.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                  <span><strong>{ticketCustomerName(q, data.customers)}</strong> · {q.number} · {q.follow_up_on ? `follow up ${q.follow_up_on}` : `opened ${q.issue_date || (q.created_at || '').slice(0, 10)}`} · ${Number(q.total || 0).toFixed(2)}</span>
+                  <span><strong>{ticketCustomerName(q, data.customers)}</strong> · {q.number} · {q.follow_up_on ? `follow up ${fmtDate(q.follow_up_on)}` : `opened ${fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))}`} · ${Number(q.total || 0).toFixed(2)}</span>
                   <button className="btn secondary" onClick={() => { setOpenQuoteId(q.id); setTab('quotes') }}>Open</button>
                 </div>
               ))}
@@ -456,7 +456,7 @@ export default function App() {
             {(searchResults.tickets || []).map((r) => (
               <div key={`${r.type}-${r.ticket.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                 <span>
-                  <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10)} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
+                  <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {fmtDate(r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10))} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
                   <div className="muted small">Matched: {r.match}</div>
                 </span>
                 <button className="btn secondary" onClick={() => { if (r.type === 'quote') { setOpenQuoteId(r.ticket.id); setTab('quotes') } else { setOpenInvoiceId(r.ticket.id); setTab('invoices') } }}>Open</button>
@@ -529,7 +529,7 @@ export default function App() {
                   .sort((a, b) => String(b.t.issue_date || b.t.created_at || '').localeCompare(String(a.t.issue_date || a.t.created_at || '')))
                   .map(({ type, t }) => (
                     <div key={`${type}-${t.id}`} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                      <strong>{t.number}</strong> · {type} · {t.status} · {t.issue_date || (t.created_at || '').slice(0, 10)} · ${Number(t.total || 0).toFixed(2)}
+                      <strong>{t.number}</strong> · {type} · {t.status} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${Number(t.total || 0).toFixed(2)}
                       {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}
                     </div>
                   ))}
@@ -639,7 +639,7 @@ export default function App() {
                                 {vInvoices.map((inv) => (
                                   <div key={inv.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
                                     <button type="button" onClick={() => openInvoice(inv)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{inv.number}</button>
-                                    {' '}· {inv.status} · {inv.issue_date || (inv.created_at || '').slice(0, 10)} · {ticketCustomerName(inv, data.customers)} · ${Number(inv.total || 0).toFixed(2)}
+                                    {' '}· {inv.status} · {fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))} · {ticketCustomerName(inv, data.customers)} · ${Number(inv.total || 0).toFixed(2)}
                                   </div>
                                 ))}
                                 <h4 style={{ margin: '12px 0 4px' }}>Quotes ({vQuotes.length})</h4>
@@ -647,7 +647,7 @@ export default function App() {
                                 {vQuotes.map((q) => (
                                   <div key={q.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
                                     <button type="button" onClick={() => openQuote(q)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{q.number}</button>
-                                    {' '}· {q.status} · {q.issue_date || (q.created_at || '').slice(0, 10)} · {ticketCustomerName(q, data.customers)} · ${Number(q.total || 0).toFixed(2)}
+                                    {' '}· {q.status} · {fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))} · {ticketCustomerName(q, data.customers)} · ${Number(q.total || 0).toFixed(2)}
                                   </div>
                                 ))}
                               </td>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -253,7 +253,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
               <tr key={q.id}>
                 <td className="nowrap"><strong>{q.number}</strong></td>
                 <td className="customer" title={customerOf(q)}>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
-                <td className="nowrap">{q.issue_date || (q.created_at || '').slice(0, 10)}</td>
+                <td className="nowrap">{fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))}</td>
                 <td className="nowrap">{age ?? '—'}d</td>
                 <td className="nowrap">{nameOf(q.salesperson_id)}</td>
                 <td className="nowrap">{q.status}</td>

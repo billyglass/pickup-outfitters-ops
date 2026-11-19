@@ -1,4 +1,4 @@
-import { money, computeTotals, lineTotal, laborAmount } from '../lib/tickets.js'
+import { money, computeTotals, lineTotal, laborAmount, fmtDate } from '../lib/tickets.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
@@ -66,11 +66,11 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
             {email && <div>Email: {email}</div>}
           </div>
           <div>
-            <div>Date: {ticket.issue_date || (ticket.created_at || '').slice(0, 10)}</div>
+            <div>Date: {fmtDate(ticket.issue_date || (ticket.created_at || '').slice(0, 10))}</div>
             {isQuote
-              ? <div>Quotation valid until: {ticket.expires_on || '—'}</div>
-              : <div>Due date: {ticket.due_date || '—'}</div>}
-            {ticket.follow_up_on && <div>Follow-up: {ticket.follow_up_on}</div>}
+              ? <div>Quotation valid until: {fmtDate(ticket.expires_on)}</div>
+              : <div>Due date: {fmtDate(ticket.due_date)}</div>}
+            {ticket.follow_up_on && <div>Follow-up: {fmtDate(ticket.follow_up_on)}</div>}
           </div>
         </div>
 

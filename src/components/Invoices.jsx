@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -212,8 +212,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
                 <td className="customer" title={customerOf(inv)}>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
                 <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}<div className="muted small sub">VIN {vin}</div></td>
-                <td className="nowrap">{inv.issue_date || (inv.created_at || '').slice(0, 10)}</td>
-                <td className="nowrap">{inv.due_date || '—'}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
+                <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
+                <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
                 <td className="nowrap">{nameOf(inv.salesperson_id)}</td>
                 <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}</td>
                 <td className="num">${Number(inv.total || 0).toFixed(2)}</td>
