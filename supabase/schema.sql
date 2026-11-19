@@ -214,6 +214,7 @@ create table if not exists public.vehicles (
   year integer check (year is null or (year between 1900 and 2100)),
   make text,
   model text,
+  bed_size text,
   fleet_unit text,
   color text,
   plate text,

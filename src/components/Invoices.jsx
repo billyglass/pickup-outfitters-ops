@@ -208,13 +208,14 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
           {filtered.map((inv) => {
             const v = data.vehicles.find((x) => x.id === inv.vehicle_id)
             const vin = inv.vehicle_snapshot?.vin || v?.vin || '—'
+            const bedSize = inv.vehicle_snapshot?.bed_size || v?.bed_size || ''
             const color = inv.vehicle_snapshot?.color || v?.color || ''
             const overdue = isOverdue(inv)
             return (
               <tr key={inv.id}>
                 <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
                 <td className="customer" title={customerOf(inv)}>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
-                <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></td>
+                <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}{bedSize ? ` · ${bedSize}` : ''}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></td>
                 <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
                 <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
                 <td className="nowrap">{nameOf(inv.salesperson_id)}</td>

@@ -55,9 +55,9 @@ export default function TicketForm({
   const [lines, setLines] = useState(() =>
     (initialLines?.length ? initialLines : [emptyLine()]).map((l) => normalizeLineForForm(l))
   )
-  // Vehicle is entered ON the ticket — VIN + Year/Make/Model on one line,
-  // Fleet/Unit (short) + Color on the next. No separate vehicle step: on
-  // save the ticket's VIN/YMM upserts the Vehicles directory (see
+  // Vehicle is entered ON the ticket — VIN + Year/Make/Model/Bed size/
+  // Color on one line, Fleet/Unit on the next. No separate vehicle step:
+  // on save the ticket's VIN/YMM upserts the Vehicles directory (see
   // store.saveTicket).
   // Initial fields come from the ticket snapshot first, then the linked
   // vehicle record (older tickets whose snapshot lacks YMM).
@@ -123,6 +123,7 @@ export default function TicketForm({
       year: v.year || vinMatch.year || '',
       make: v.make || vinMatch.make || '',
       model: v.model || vinMatch.model || '',
+      bed_size: v.bed_size || vinMatch.bed_size || '',
       fleet_unit: v.fleet_unit || vinMatch.fleet_unit || '',
       color: v.color || vinMatch.color || '',
     }))
@@ -419,7 +420,7 @@ export default function TicketForm({
           <label>VIN</label>
           <input
             value={veh.vin || ''} disabled={readOnly} autoFocus={!!prefill} autoComplete="off"
-            placeholder="Type the full VIN — Year/Make/Model fill in if it's already on file"
+            placeholder="Type the full VIN"
             onChange={(e) => {
               const v = normalizeVin(e.target.value)
               setVeh((prev) => ({ ...prev, vin: v }))
@@ -442,18 +443,22 @@ export default function TicketForm({
           <label>Model</label>
           <input value={veh.model || ''} disabled={readOnly} placeholder="F-250" onChange={(e) => { setVeh((v) => ({ ...v, model: e.target.value })); setStatus('unsaved') }} />
         </div>
-      </div>
-      <div className="vehicle-sub-row">
         <div>
-          <label>Fleet / unit (optional)</label>
-          <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
+          <label>Bed size (optional)</label>
+          <input value={veh.bed_size || ''} disabled={readOnly} placeholder="e.g. 8' bed" onChange={(e) => { setVeh((v) => ({ ...v, bed_size: e.target.value })); setStatus('unsaved') }} />
         </div>
         <div>
           <label>Color (optional)</label>
           <input value={veh.color || ''} disabled={readOnly} placeholder="e.g. Red" onChange={(e) => { setVeh((v) => ({ ...v, color: e.target.value })); setStatus('unsaved') }} />
         </div>
       </div>
-      {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model, unit and color filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
+      <div className="vehicle-sub-row">
+        <div>
+          <label>Fleet / unit (optional)</label>
+          <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
+        </div>
+      </div>
+      {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model, bed size, unit and color filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
       {vinMatchOtherCustomer && <div className="warn">This VIN is already on file under a different customer ({vinMatch.year || ''} {vinMatch.make || ''} {vinMatch.model || ''}). You can still save — check it's not a typo or the wrong customer.</div>}
       {vinNorm && vinNorm.length !== 17 && <div className="warn">This VIN is {vinNorm.length} characters — a full VIN is 17. Check for a typo. You can still save.</div>}
       {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}

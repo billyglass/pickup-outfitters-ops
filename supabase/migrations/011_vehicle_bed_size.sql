@@ -1,0 +1,14 @@
+-- 011_vehicle_bed_size.sql — run once in the live Supabase SQL Editor.
+--
+-- Vehicle bed size (Nov 19, 2026). Bill wants the bed size after Year/Make/
+-- Model on quotes and invoices, so a truck's bed can be told apart at a
+-- glance. Nullable text, no backfill: existing vehicles simply have no bed
+-- size until someone types one in. Vans have no bed — blank is fine.
+--
+-- SEQUENCING — run this BEFORE Bill saves any ticket with a VIN or edits
+-- a vehicle after the matching code deploy. The app sends `bed_size` in the
+-- vehicle insert/update payloads, and PostgREST rejects an unknown column
+-- (PGRST204), which aborts the whole ticket save. Saves with no VIN, and
+-- saves where the vehicle record already matches (link, no write), are
+-- unaffected — but do not rely on that; run the migration first.
+alter table public.vehicles add column if not exists bed_size text;

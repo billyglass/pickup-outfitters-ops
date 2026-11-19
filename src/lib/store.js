@@ -180,6 +180,7 @@ async function sbSaveVehicle(vehicle) {
         year: vehicle.year || null,
         make: vehicle.make || null,
         model: vehicle.model || null,
+        bed_size: vehicle.bed_size || null,
         fleet_unit: vehicle.fleet_unit || null,
         color: vehicle.color || null,
         notes: vehicle.notes || null,
@@ -200,6 +201,7 @@ async function sbSaveVehicle(vehicle) {
       year: vehicle.year || null,
       make: vehicle.make || null,
       model: vehicle.model || null,
+      bed_size: vehicle.bed_size || null,
       fleet_unit: vehicle.fleet_unit || null,
       color: vehicle.color || null,
       notes: vehicle.notes || null,
@@ -215,7 +217,7 @@ async function sbCheckVin(vin, excludeId) {
   if (!normalized) return []
   const { data, error } = await supabase
     .from('vehicles')
-    .select('id, vin, vin_normalized, customer_id, year, make, model, fleet_unit, color')
+    .select('id, vin, vin_normalized, customer_id, year, make, model, bed_size, fleet_unit, color')
     .eq('vin_normalized', normalized)
   if (error) throw error
   return (data || []).filter((v) => v.id !== excludeId)
@@ -318,6 +320,7 @@ async function sbUpsertVehicleFromTicket(customerId, snapshot) {
     year: snapshot.year ?? '',
     make: snapshot.make || '',
     model: snapshot.model || '',
+    bed_size: snapshot.bed_size || '',
     fleet_unit: snapshot.fleet_unit || '',
     color: snapshot.color || '',
   }
@@ -352,6 +355,7 @@ function localUpsertVehicleFromTicket(customerId, snapshot) {
     year: snapshot.year ?? '',
     make: snapshot.make || '',
     model: snapshot.model || '',
+    bed_size: snapshot.bed_size || '',
     fleet_unit: snapshot.fleet_unit || '',
     color: snapshot.color || '',
   }
@@ -387,6 +391,7 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
         year: ticket.vehicle_snapshot?.year ?? '',
         make: ticket.vehicle_snapshot?.make || '',
         model: ticket.vehicle_snapshot?.model || '',
+        bed_size: ticket.vehicle_snapshot?.bed_size || '',
         fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
         color: ticket.vehicle_snapshot?.color || '',
       },
@@ -506,6 +511,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
           year: quote.vehicle_snapshot?.year ?? '',
           make: quote.vehicle_snapshot?.make || '',
           model: quote.vehicle_snapshot?.model || '',
+          bed_size: quote.vehicle_snapshot?.bed_size || '',
           fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
           color: quote.vehicle_snapshot?.color || '',
         },
@@ -795,6 +801,7 @@ function localSaveTicket(kind, ticket, lines, userId) {
             year: ticket.vehicle_snapshot?.year ?? '',
             make: ticket.vehicle_snapshot?.make || '',
             model: ticket.vehicle_snapshot?.model || '',
+            bed_size: ticket.vehicle_snapshot?.bed_size || '',
             fleet_unit: ticket.vehicle_snapshot?.fleet_unit || '',
             color: ticket.vehicle_snapshot?.color || '',
               },
@@ -877,6 +884,7 @@ export async function globalSearch(query, state, filters = {}) {
     const vehicles = state.vehicles.filter((v) =>
       vinMatches(v.vin) ||
       String(v.fleet_unit || '').toLowerCase().includes(lower) ||
+      String(v.bed_size || '').toLowerCase().includes(lower) ||
       String(v.color || '').toLowerCase().includes(lower) ||
       matchedCustomerIds.has(v.customer_id)
     )
@@ -907,7 +915,7 @@ export async function globalSearch(query, state, filters = {}) {
   const [customers, contacts, vehicles, quotes, invoices, qLines, iLines] = await Promise.all([
     customersQuery.limit(20),
     supabase.from('contacts').select('*').or(`name.ilike.${like},email.ilike.${like},phone.ilike.${like}`).limit(20),
-    supabase.from('vehicles').select('*').or(`vin_normalized.ilike.${like},fleet_unit.ilike.${like},color.ilike.${like}`).limit(20),
+    supabase.from('vehicles').select('*').or(`vin_normalized.ilike.${like},fleet_unit.ilike.${like},bed_size.ilike.${like},color.ilike.${like}`).limit(20),
     supabase.from('quotes').select('*').or(`number.ilike.${like},po_number.ilike.${like}`).limit(20),
     supabase.from('invoices').select('*').or(`number.ilike.${like},po_number.ilike.${like}`).limit(20),
     supabase.from('quote_lines').select('*').or(`description.ilike.${like},part_number.ilike.${like}`).limit(20),
@@ -1123,6 +1131,7 @@ export const store = {
               year: quote.vehicle_snapshot?.year ?? '',
               make: quote.vehicle_snapshot?.make || '',
               model: quote.vehicle_snapshot?.model || '',
+              bed_size: quote.vehicle_snapshot?.bed_size || '',
               fleet_unit: quote.vehicle_snapshot?.fleet_unit || '',
               color: quote.vehicle_snapshot?.color || '',
                 },

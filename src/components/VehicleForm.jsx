@@ -7,7 +7,7 @@ import ComboBox from './ComboBox.jsx'
 export default function VehicleForm({ initial, customers, preselectedCustomerId, isAdmin, onSaved, onCancel, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [vehicle, setVehicle] = useState(
-    initial || { customer_id: preselectedCustomerId || '', vin: '', year: '', make: '', model: '', fleet_unit: '', color: '', notes: '' }
+    initial || { customer_id: preselectedCustomerId || '', vin: '', year: '', make: '', model: '', bed_size: '', fleet_unit: '', color: '', notes: '' }
   )
   const [vinMatches, setVinMatches] = useState([])
   const [status, setStatus] = useState('saved')
@@ -106,12 +106,16 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
           <input id="vf-model" value={vehicle.model || ''} onChange={(e) => markDirty({ model: e.target.value })} placeholder="F-250" />
         </div>
         <div>
-          <label htmlFor="vf-fleet">Fleet / unit number</label>
-          <input id="vf-fleet" value={vehicle.fleet_unit || ''} onChange={(e) => markDirty({ fleet_unit: e.target.value })} />
+          <label htmlFor="vf-bed">Bed size</label>
+          <input id="vf-bed" value={vehicle.bed_size || ''} onChange={(e) => markDirty({ bed_size: e.target.value })} placeholder="e.g. 8' bed" />
         </div>
         <div>
           <label htmlFor="vf-color">Color</label>
           <input id="vf-color" value={vehicle.color || ''} onChange={(e) => markDirty({ color: e.target.value })} placeholder="e.g. Red" />
+        </div>
+        <div>
+          <label htmlFor="vf-fleet">Fleet / unit number</label>
+          <input id="vf-fleet" value={vehicle.fleet_unit || ''} onChange={(e) => markDirty({ fleet_unit: e.target.value })} />
         </div>
       </div>
       {vinMatches.length > 0 && (
@@ -120,7 +124,7 @@ export default function VehicleForm({ initial, customers, preselectedCustomerId,
           {vinMatches.length} other vehicle record{vinMatches.length > 1 ? 's' : ''}:
           {vinMatches.map((m) => (
             <div key={m.id} className="small">
-              {m.year || ''} {m.make || ''} {m.model || ''} — unit {m.fleet_unit || '—'}{m.color ? ` · ${m.color}` : ''}
+              {m.year || ''} {m.make || ''} {m.model || ''}{m.bed_size ? ` · ${m.bed_size}` : ''} — unit {m.fleet_unit || '—'}{m.color ? ` · ${m.color}` : ''}
             </div>
           ))}
           You can still save — this is a warning, not a block. Check it is not a

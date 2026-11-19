@@ -170,6 +170,7 @@ export function vehicleSnapshot(vehicle, vinOverride) {
     year: vehicle?.year ?? null,
     make: vehicle?.make || null,
     model: vehicle?.model || null,
+    bed_size: vehicle?.bed_size || null,
     fleet_unit: vehicle?.fleet_unit || null,
     color: vehicle?.color || null,
     vin: vin || null,
@@ -180,13 +181,13 @@ export function vehicleSnapshot(vehicle, vinOverride) {
 
 // --- Vehicle entry lives ON the ticket -------------------------------------
 // Bill's rule (Nov 18): a vehicle is entered on the quote/invoice itself —
-// VIN + Year/Make/Model on one line, Fleet/Unit (short) + Color on the
+// VIN + Year/Make/Model/Bed size/Color on one line, Fleet/Unit on the
 // next — and the Vehicles tab is populated FROM tickets, not filled in
 // first. The ticket's vehicle fields are the source of truth for the
 // snapshot; the vehicles table is the directory the ticket feeds.
 
 export function emptyVehicleFields() {
-  return { vin: '', year: '', make: '', model: '', fleet_unit: '', color: '' }
+  return { vin: '', year: '', make: '', model: '', bed_size: '', fleet_unit: '', color: '' }
 }
 
 // Fields for the ticket's Vehicle section: snapshot first (frozen ticket
@@ -199,6 +200,7 @@ export function vehicleFieldsFromSnapshot(snapshot, vehicle) {
     year: s.year ?? vehicle?.year ?? '',
     make: s.make || vehicle?.make || '',
     model: s.model || vehicle?.model || '',
+    bed_size: s.bed_size || vehicle?.bed_size || '',
     fleet_unit: s.fleet_unit || vehicle?.fleet_unit || '',
     color: s.color || vehicle?.color || '',
   }
@@ -210,12 +212,13 @@ export function vehicleFieldsFromSnapshot(snapshot, vehicle) {
 export function vehicleSnapshotFromFields(fields, vehicleId) {
   const f = fields || {}
   const vin = normalizeVin(f.vin || '')
-  if (!vin && !f.year && !f.make && !f.model && !f.fleet_unit && !f.color) return null
+  if (!vin && !f.year && !f.make && !f.model && !f.bed_size && !f.fleet_unit && !f.color) return null
   return {
     vehicle_id: vehicleId || null,
     year: f.year ? Number(f.year) : null,
     make: (f.make || '').trim() || null,
     model: (f.model || '').trim() || null,
+    bed_size: (f.bed_size || '').trim() || null,
     fleet_unit: (f.fleet_unit || '').trim() || null,
     color: (f.color || '').trim() || null,
     vin: vin || null,
@@ -247,6 +250,7 @@ export function mergeVehicleFields(existing, incoming) {
   take('year', true)
   take('make')
   take('model')
+  take('bed_size')
   take('fleet_unit')
   take('color')
   return next
@@ -274,13 +278,14 @@ export function resolveVehicleUpsert(vehicles, customerId, fields) {
         year: fields.year ? Number(fields.year) : null,
         make: (fields.make || '').trim() || null,
         model: (fields.model || '').trim() || null,
+        bed_size: (fields.bed_size || '').trim() || null,
         fleet_unit: (fields.fleet_unit || '').trim() || null,
         color: (fields.color || '').trim() || null,
       },
     }
   }
   const merged = mergeVehicleFields(existing, { ...fields, vin })
-  const changed = ['year', 'make', 'model', 'fleet_unit', 'color'].some(
+  const changed = ['year', 'make', 'model', 'bed_size', 'fleet_unit', 'color'].some(
     (k) => (merged[k] ?? null) !== (existing[k] ?? null)
   )
   return {
@@ -291,6 +296,7 @@ export function resolveVehicleUpsert(vehicles, customerId, fields) {
           year: merged.year ?? null,
           make: merged.make || null,
           model: merged.model || null,
+          bed_size: merged.bed_size || null,
           fleet_unit: merged.fleet_unit || null,
           color: merged.color || null,
         }
