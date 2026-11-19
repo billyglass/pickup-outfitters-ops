@@ -241,6 +241,32 @@ export default function App() {
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
   const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
+  // Dashboard (the sales home page): today's tickets, and the open quotes
+  // to chase. Dates use the shop's local day, not UTC — an evening ticket
+  // still counts as today.
+  const localDay = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const todayStr = localDay(new Date().toISOString())
+  const todaysTickets = [
+    ...data.quotes.map((t) => ({ type: 'quote', t })),
+    ...data.invoices.map((t) => ({ type: 'invoice', t })),
+  ]
+    .filter(({ t }) => localDay(t.created_at || t.issue_date) === todayStr)
+    .sort((a, b) => String(b.t.created_at || '').localeCompare(String(a.t.created_at || '')))
+  const chaseQuotes = data.quotes
+    .filter((q) => q.status === 'Open' && !q.converted_invoice_id)
+    .sort((a, b) => {
+      const dueA = a.follow_up_on && a.follow_up_on <= todayStr ? 0 : 1
+      const dueB = b.follow_up_on && b.follow_up_on <= todayStr ? 0 : 1
+      if (dueA !== dueB) return dueA - dueB
+      const da = a.issue_date || (a.created_at || '').slice(0, 10) || ''
+      const db = b.issue_date || (b.created_at || '').slice(0, 10) || ''
+      return da < db ? -1 : da > db ? 1 : 0
+    })
+
   // Tickets tied to a vehicle: by vehicle_id, or by the VIN in the ticket's
   // snapshot (covers older tickets saved before the link was stored).
   const ticketsForVehicle = (v) => {
@@ -354,6 +380,35 @@ export default function App() {
             <p className="muted small">
               Sales users see no revenue, margin, cost, or report data anywhere in this system — those areas are Admin-only and blocked in the database.
             </p>
+            <div className="card">
+              <div className="row-between">
+                <h2 style={{ margin: 0 }}>Today's tickets ({todaysTickets.length})</h2>
+                <span className="muted small">{todayStr}</span>
+              </div>
+              <p className="muted small">Quotes and invoices created today — newest first. Click Open to pick one up.</p>
+              {todaysTickets.length === 0 && <p className="muted">No tickets created today yet.</p>}
+              {todaysTickets.map(({ type, t }) => (
+                <div key={`${type}-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} <span className="pill">{type === 'quote' ? 'Quote' : 'Invoice'}</span> · {t.status} · ${Number(t.total || 0).toFixed(2)}</span>
+                  <button className="btn secondary" onClick={() => { if (type === 'quote') { setOpenQuoteId(t.id); setTab('quotes') } else { setOpenInvoiceId(t.id); setTab('invoices') } }}>Open</button>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div className="row-between">
+                <h2 style={{ margin: 0 }}>Open quotes to chase ({chaseQuotes.length})</h2>
+                <button className="btn secondary" onClick={() => setTab('quotes')}>All quotes →</button>
+              </div>
+              <p className="muted small">Follow-up due first, then oldest — the ones waiting longest get chased first.</p>
+              {chaseQuotes.length === 0 && <p className="muted">No open quotes. Nothing to chase.</p>}
+              {chaseQuotes.slice(0, 8).map((q) => (
+                <div key={q.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                  <span><strong>{ticketCustomerName(q, data.customers)}</strong> · {q.number} · {q.follow_up_on ? `follow up ${q.follow_up_on}` : `opened ${q.issue_date || (q.created_at || '').slice(0, 10)}`} · ${Number(q.total || 0).toFixed(2)}</span>
+                  <button className="btn secondary" onClick={() => { setOpenQuoteId(q.id); setTab('quotes') }}>Open</button>
+                </div>
+              ))}
+              {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
+            </div>
           </>
         )}
 
