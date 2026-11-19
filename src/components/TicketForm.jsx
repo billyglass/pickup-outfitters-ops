@@ -187,6 +187,25 @@ export default function TicketForm({
     setStatus('unsaved')
   }
 
+  // Tax-exempt customer: the moment one is picked, uncheck Taxable on
+  // every line — tax must never be charged on their tickets. The boxes
+  // stay on the form and can be re-checked by hand for a taxable line.
+  // One-way only: switching to a taxable customer never re-checks lines.
+  // The ref starts at the ticket's own customer, so opening an existing
+  // ticket never rewrites its saved lines — only a fresh pick does.
+  const lastCustomerId = useRef(walkIn ? '' : (ticket.customer_id || ''))
+  useEffect(() => {
+    const id = walkIn ? '' : (ticket.customer_id || '')
+    if (id === lastCustomerId.current) return
+    lastCustomerId.current = id
+    if (readOnly) return
+    const picked = customers.find((c) => c.id === id)
+    if (!picked?.tax_exempt) return
+    if (!lines.some((l) => l.taxable)) return
+    setLines((prev) => prev.map((l) => ({ ...l, taxable: false })))
+    setStatus('unsaved')
+  }, [ticket.customer_id, walkIn]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function applyRenumber() {
     setRenumberErr('')
     setRenumberMsg('')
@@ -553,7 +572,7 @@ export default function TicketForm({
           </div>
         </div>
       ))}
-      {!readOnly && <button type="button" className="btn secondary" onClick={() => { setLines([...lines, emptyLine()]); setStatus('unsaved') }}>+ Add line</button>}
+      {!readOnly && <button type="button" className="btn secondary" onClick={() => { setLines([...lines, emptyLine(!customer?.tax_exempt)]); setStatus('unsaved') }}>+ Add line</button>}
       </section>
 
       <section className="ticket-section">

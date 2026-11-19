@@ -77,7 +77,7 @@ export function normalizeLineForForm(line) {
   }
 }
 
-export function emptyLine() {
+export function emptyLine(taxable = true) {
   return {
     id: null,
     product_id: null,
@@ -87,7 +87,7 @@ export function emptyLine() {
     unit_price: 0,
     labor_amount: 0,
     discount: 0,
-    taxable: true,
+    taxable,
     line_kind: 'part',
     line_total: 0,
     sort_order: 0,
