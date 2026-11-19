@@ -7,8 +7,10 @@ import { titleCaseName } from './names.js'
 // 7.74% tax. Tax is computed per taxable line and rounded to the cent.
 // Labor (Nov 18, matching Bill's Excel template): each line has a flat
 // Labor $ amount, optional. Subtotal = parts only (qty x unit price).
-// Labor total = sum of the Labor $ column. Tax = 7.74% on TAXABLE PARTS
-// amounts only (labor is not taxed). TOTAL = Subtotal + Tax + Labor.
+// Labor total = sum of the Labor $ column PLUS an optional lump-sum labor
+// amount on the ticket itself (Nov 19 — sometimes labor is one lump sum
+// instead of a line item). Tax = 7.74% on TAXABLE PARTS amounts only
+// (labor is not taxed, lump included). TOTAL = Subtotal + Tax + Labor.
 // This replaces the old math, where labor-kind lines lived inside the
 // subtotal and were shown separately but not added again.
 
@@ -34,18 +36,20 @@ export function laborAmount(line) {
   return roundCents(Number(line.labor_amount) || 0)
 }
 
-export function computeTotals(lines, taxRate = TAX_RATE_DEFAULT) {
+export function computeTotals(lines, taxRate = TAX_RATE_DEFAULT, laborLump = 0) {
   const rate = Number(taxRate) || 0
+  const lump = roundCents(Number(laborLump) || 0)
   let subtotal = 0
-  let labor = 0
+  let laborLines = 0
   let tax = 0
   for (const line of lines || []) {
     const parts = lineTotal(line)
     subtotal = roundCents(subtotal + parts)
-    labor = roundCents(labor + laborAmount(line))
+    laborLines = roundCents(laborLines + laborAmount(line))
     if (line.taxable) tax = roundCents(tax + roundCents(parts * rate))
   }
-  return { subtotal, labor, taxTotal: tax, total: roundCents(subtotal + tax + labor) }
+  const labor = roundCents(laborLines + lump)
+  return { subtotal, labor, laborLines, laborLump: lump, taxTotal: tax, total: roundCents(subtotal + tax + labor) }
 }
 
 // Convert a stored line to the current form shape (form layer only —
@@ -309,7 +313,7 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   // Pure function — nothing is saved here. The caller opens TicketForm with
   // the result; only Save creates the record, with a NEW atomic number.
   // Carries over: customer, vehicle (same one, for the user to change),
-  // lines (in order), customer notes, payment terms, PO number.
+  // lines (in order), lump-sum labor, customer notes, payment terms, PO number.
   // Does NOT carry over: id, number, previous_numbers, quote_id (a duplicate
   // is not a conversion), converted_invoice_id, follow-up date, payments /
   // balance history, created_by (reset to the current user), version.
@@ -334,6 +338,7 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
     payment_terms: source.payment_terms || settings?.default_payment_terms || 'Net 30',
     customer_notes: source.customer_notes || '',
     internal_notes: [source.internal_notes, sourceNote].filter(Boolean).join('\n'),
+    labor_lump: Number(source.labor_lump) || 0,
     issue_date: issue,
     sourceLabel: label,
   }

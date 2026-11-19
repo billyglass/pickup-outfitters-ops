@@ -5,14 +5,17 @@ import { money, computeTotals, lineTotal, laborAmount, fmtDate } from '../lib/ti
 // "Quotation For:" / "Invoice For:" Name / Company / Address / Phone / Email
 // Date + valid until (quote) / due date (invoice)
 // SALESPERSON / P.O. NUMBER / VEHICLE / TERMS
-// Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / TAXABLE / AMOUNT / LABOR
+// Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / AMOUNT / LABOR
+// (the Taxable column is set per line when creating the ticket and is
+// NOT printed — tax is already baked into the totals). Labor on the
+// print is one combined line: per-line Labor $ + lump-sum labor.
 // NOTES — SUBTOTAL / TAX (7.74%) / LABOR / TOTAL — "Thank You For Your Business"
 // Plain black-and-white, no background colours. VIN and Year/Make/Model
 // print on the SAME line, matching the ticket's Vehicle section.
 export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose }) {
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? 0.0774)
-  const totals = computeTotals(lines, taxRate)
+  const totals = computeTotals(lines, taxRate, ticket.labor_lump)
   const snapCustomer = ticket.customer_snapshot || {}
   const snapVehicle = ticket.vehicle_snapshot || {}
   const vin = snapVehicle.vin || vehicle?.vin || ''
@@ -90,7 +93,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         <div className="print-vin">{vehicleLine || 'Vehicle: —'}</div>
 
         <table className="print-lines">
-          <thead><tr><th>Quantity</th><th>Description</th><th>Part Number</th><th>Unit Price</th><th>Taxable</th><th>Amount</th><th>Labor</th></tr></thead>
+          <thead><tr><th>Quantity</th><th>Description</th><th>Part Number</th><th>Unit Price</th><th>Amount</th><th>Labor</th></tr></thead>
           <tbody>
             {(lines || []).map((l, i) => (
               <tr key={l.id || i}>
@@ -98,12 +101,11 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
                 <td>{l.description}</td>
                 <td>{l.part_number || '—'}</td>
                 <td>${money(l.unit_price)}</td>
-                <td>{l.taxable ? 't' : ''}</td>
                 <td>${money(lineTotal(l))}</td>
                 <td>${money(laborAmount(l))}</td>
               </tr>
             ))}
-            {(lines || []).length === 0 && <tr><td colSpan="7">No line items.</td></tr>}
+            {(lines || []).length === 0 && <tr><td colSpan="6">No line items.</td></tr>}
           </tbody>
         </table>
 

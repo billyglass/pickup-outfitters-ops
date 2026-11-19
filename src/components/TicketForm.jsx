@@ -43,6 +43,7 @@ export default function TicketForm({
       payment_terms: settings?.default_payment_terms || 'Net 30',
       customer_notes: '',
       internal_notes: '',
+      labor_lump: 0,
       issue_date: issue,
       expires_on: isQuote ? addDays(issue, settings?.quote_validity_days ?? 15) : undefined,
       follow_up_on: '',
@@ -130,7 +131,7 @@ export default function TicketForm({
     setTicket((t) => (t.vehicle_id === vinMatch.id ? t : { ...t, vehicle_id: vinMatch.id }))
     setStatus('unsaved')
   }, [vinMatch, vinNorm]) // eslint-disable-line react-hooks/exhaustive-deps
-  const totals = useMemo(() => computeTotals(lines, taxRate), [lines, taxRate])
+  const totals = useMemo(() => computeTotals(lines, taxRate, ticket.labor_lump), [lines, taxRate, ticket.labor_lump])
   // Suggestions: companies — or their contacts — starting with what was
   // typed come first, then ones that just contain it. Empty query shows
   // the first few alphabetically, so clicking the box lists customers.
@@ -581,7 +582,17 @@ export default function TicketForm({
         <tbody>
           <tr><td>Subtotal</td><td style={{ textAlign: 'right' }}>${money(totals.subtotal)}</td></tr>
           <tr><td>Tax ({(taxRate * 100).toFixed(2)}%) — taxable lines only</td><td style={{ textAlign: 'right' }}>${money(totals.taxTotal)}</td></tr>
-          <tr><td>Labor (sum of the Labor $ on each line)</td><td style={{ textAlign: 'right' }}>${money(totals.labor)}</td></tr>
+          <tr>
+            <td>Lump-sum labor</td>
+            <td style={{ textAlign: 'right' }}>
+              <input
+                type="number" min="0" step="0.01" placeholder="0.00" disabled={readOnly}
+                value={ticket.labor_lump || ''} style={{ width: 110, textAlign: 'right' }}
+                onChange={(e) => patch({ labor_lump: Number(e.target.value) || 0 })}
+              />
+            </td>
+          </tr>
+          <tr><td>Labor (lines ${money(totals.laborLines)} + lump ${money(totals.laborLump)})</td><td style={{ textAlign: 'right' }}>${money(totals.labor)}</td></tr>
           <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>${money(totals.total)}</strong></td></tr>
         </tbody>
       </table>

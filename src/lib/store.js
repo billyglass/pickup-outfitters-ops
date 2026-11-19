@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, roundCents, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail } from './tickets.js'
 import { titleCaseName } from './names.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
@@ -381,7 +381,7 @@ function localUpsertVehicleFromTicket(customerId, snapshot) {
 
 async function sbSaveTicket(kind, ticket, lines, userId) {
   const table = ticketTable(kind)
-  const totals = computeTotals(lines, ticket.tax_rate)
+  const totals = computeTotals(lines, ticket.tax_rate, ticket.labor_lump)
   // Vehicle upsert from the ticket's own VIN/YMM fields. For a NEW ticket
   // this runs before the insert; for an EXISTING ticket it runs after the
   // version check below (so a conflicting save never creates/updates a
@@ -415,6 +415,7 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
     internal_notes: ticket.internal_notes || null,
     customer_snapshot: ticket.customer_snapshot || null,
     vehicle_snapshot: ticket.vehicle_snapshot || null,
+    labor_lump: roundCents(Number(ticket.labor_lump) || 0),
     subtotal: totals.subtotal,
     tax_total: totals.taxTotal,
     total: totals.total,
@@ -504,7 +505,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
     return existing
   }
   const issueDate = todayStr()
-  const totals = computeTotals(quoteLines, state.settings?.tax_rate)
+  const totals = computeTotals(quoteLines, state.settings?.tax_rate, quote.labor_lump)
   const number = await sbNextNumber('invoice')
   // The vehicle comes from the quote's ticket fields: upsert it into the
   // Vehicles directory and link the new invoice to that record.
@@ -542,6 +543,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       internal_notes: quote.internal_notes || null,
       customer_snapshot: quote.customer_snapshot || null,
       vehicle_snapshot: convertedSnapshot || null,
+      labor_lump: roundCents(Number(quote.labor_lump) || 0),
       subtotal: totals.subtotal,
       tax_total: totals.taxTotal,
       total: totals.total,
@@ -798,7 +800,7 @@ function localNextNumber(kind) {
 function localSaveTicket(kind, ticket, lines, userId) {
   const key = kind === 'quote' ? LS_QUOTES : LS_INVOICES
   const rows = lsRead(key, [])
-  const totals = computeTotals(lines, ticket.tax_rate)
+  const totals = computeTotals(lines, ticket.tax_rate, ticket.labor_lump)
   // Vehicle upsert from the ticket's own VIN/YMM, same as Supabase mode.
   const localVehicle = localUpsertVehicleFromTicket(ticket.customer_id, ticket.vehicle_snapshot)
   const saved = {
@@ -1284,7 +1286,7 @@ export const store = {
         return lsRead(LS_INVOICES, []).find((i) => i.id === quote.converted_invoice_id) || null
       }
       const issueDate = todayStr()
-      const totals = computeTotals(quoteLines, state.settings?.tax_rate)
+      const totals = computeTotals(quoteLines, state.settings?.tax_rate, quote.labor_lump)
       const localVehicle = localUpsertVehicleFromTicket(quote.customer_id, quote.vehicle_snapshot)
       const localSnapshot = localVehicle
         ? vehicleSnapshotFromFields(
@@ -1308,6 +1310,7 @@ export const store = {
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'Net 30',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,
         customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: localSnapshot || null,
+        labor_lump: roundCents(Number(quote.labor_lump) || 0),
         subtotal: totals.subtotal, tax_total: totals.taxTotal, total: totals.total, balance_due: totals.total,
         version: 1, created_at: new Date().toISOString(),
         lines: (quoteLines || []).map((l, i) => ({ ...l, id: uid(), line_total: lineTotal(l), sort_order: i })),
