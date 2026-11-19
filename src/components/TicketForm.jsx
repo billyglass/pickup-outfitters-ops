@@ -34,6 +34,10 @@ export default function TicketForm({
     // new atomic number. The original ticket is never touched.
     if (prefill) return { ...prefill }
     const issue = todayStr()
+    // A new ticket starts on the first customer, so it starts on their
+    // terms too — walk-in (COD) and other picks are handled by the
+    // selection effect below.
+    const initialTerms = customers[0]?.payment_terms || settings?.default_payment_terms || 'Net 30'
     return {
       customer_id: customers[0]?.id || '',
       vehicle_id: '',
@@ -41,14 +45,14 @@ export default function TicketForm({
       created_by: user?.id || '',
       status: isQuote ? 'Open' : 'Draft',
       po_number: '',
-      payment_terms: settings?.default_payment_terms || 'Net 30',
+      payment_terms: initialTerms,
       customer_notes: '',
       internal_notes: '',
       labor_lump: 0,
       issue_date: issue,
       expires_on: isQuote ? addDays(issue, settings?.quote_validity_days ?? 15) : undefined,
       follow_up_on: '',
-      due_date: !isQuote ? dueDateFor(issue, settings?.default_payment_terms || 'Net 30') : undefined,
+      due_date: !isQuote ? dueDateFor(issue, initialTerms) : undefined,
     }
   })
   // Legacy lines are normalized for the form: a labor-kind line's charge
@@ -189,18 +193,31 @@ export default function TicketForm({
     setStatus('unsaved')
   }
 
+  // Terms follow the selection, the moment it changes: walk-in is
+  // always COD; a picked customer brings their profile terms — but
+  // only when the profile actually has terms set (otherwise the terms
+  // field is left alone). The Terms dropdown stays editable by hand
+  // afterwards; a hand-edit never re-triggers this.
   // Tax-exempt customer: the moment one is picked, uncheck Taxable on
   // every line — tax must never be charged on their tickets. The boxes
   // stay on the form and can be re-checked by hand for a taxable line.
   // One-way only: switching to a taxable customer never re-checks lines.
   // The ref starts at the ticket's own customer, so opening an existing
-  // ticket never rewrites its saved lines — only a fresh pick does.
+  // ticket never rewrites its saved terms or lines — only a fresh pick does.
   const lastCustomerId = useRef(walkIn ? '' : (ticket.customer_id || ''))
   useEffect(() => {
     const id = walkIn ? '' : (ticket.customer_id || '')
     if (id === lastCustomerId.current) return
     lastCustomerId.current = id
     if (readOnly) return
+    if (walkIn || !id) {
+      if (ticket.payment_terms !== 'COD') patch({ payment_terms: 'COD' }, { recomputeDates: true })
+    } else {
+      const picked = customers.find((c) => c.id === id)
+      if (picked?.payment_terms && picked.payment_terms !== ticket.payment_terms) {
+        patch({ payment_terms: picked.payment_terms }, { recomputeDates: true })
+      }
+    }
     const picked = customers.find((c) => c.id === id)
     if (!picked?.tax_exempt) return
     if (!lines.some((l) => l.taxable)) return
