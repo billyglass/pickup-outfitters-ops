@@ -113,6 +113,17 @@ tr:hover td { background: #fafafa; }
    of its card. */
 .ticket-section { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 16px; margin-bottom: 18px; }
 .ticket-section > h3 { background: #f6ead9; margin: 0 -16px 12px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
+/* Search results — same card treatment as the ticket form sections, so
+   Tickets / Customers / Vehicles read as separate blocks instead of
+   running together. Each row has a title line and a muted detail line. */
+.result-group { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 8px; margin-bottom: 18px; }
+.result-group > h3 { background: #f6ead9; margin: 0 -16px 4px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
+.result-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.result-row + .result-row { border-top: 1px solid #f0e8de; }
+.result-title { font-size: 15px; }
+.result-title .pill { margin-left: 6px; }
+.result-meta { color: #666; font-size: 13px; margin-top: 3px; }
+.result-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; white-space: nowrap; }
 .ticket-form .line-card { background: #fffdf9; border-color: #e9dccf; }
 .ticket-form .line-card.line-alt { background: #f8efe4; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .vehicle-sub-row { grid-template-columns: 1fr; } .container { padding: 12px; } }

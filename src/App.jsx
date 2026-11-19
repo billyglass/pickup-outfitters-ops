@@ -415,6 +415,7 @@ export default function App() {
         )}
 
         {tab === 'search' && searchResults && (
+          <>
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Search results for “{searchQuery}”</h2>
             <p className="muted small">Searches inside quotes and invoices too — VIN (full / last 6 / last 8), part numbers, line-item descriptions, numbers, and PO numbers.</p>
@@ -453,34 +454,51 @@ export default function App() {
               <input type="date" value={searchFilters.to} onChange={(e) => setSearchFilters({ ...searchFilters, to: e.target.value })} aria-label="To date" />
               <button className="btn secondary" onClick={runSearch}>Apply filters</button>
             </div>
+          </div>
+          <div className="result-group">
             <h3>Tickets ({(searchResults.tickets || []).length})</h3>
             {(searchResults.tickets || []).length === 0 && <p className="muted">No quotes or invoices matched.</p>}
             {(searchResults.tickets || []).map((r) => (
-              <div key={`${r.type}-${r.ticket.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <span>
-                  <strong>{r.ticket.number}</strong> · {r.type === 'quote' ? 'Quote' : 'Invoice'} · {r.ticket.status} · {r.customer} · VIN {r.vin || '—'} · {fmtDate(r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10))} · {r.salesperson || '—'} · ${Number(r.ticket.total || 0).toFixed(2)}
+              <div key={`${r.type}-${r.ticket.id}`} className="result-row">
+                <div>
+                  <div className="result-title"><strong>{r.ticket.number}</strong> <span className="pill">{r.type === 'quote' ? 'Quote' : 'Invoice'}</span> <span className="pill">{r.ticket.status}</span></div>
+                  <div className="result-meta">{r.customer} · VIN {r.vin || '—'} · {fmtDate(r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10))} · {r.salesperson || '—'}</div>
                   <div className="muted small">Matched: {r.match}</div>
-                </span>
-                <button className="btn secondary" onClick={() => { if (r.type === 'quote') { setOpenQuoteId(r.ticket.id); setTab('quotes') } else { setOpenInvoiceId(r.ticket.id); setTab('invoices') } }}>Open</button>
+                </div>
+                <div className="result-side">
+                  <strong>${Number(r.ticket.total || 0).toFixed(2)}</strong>
+                  <button className="btn secondary" onClick={() => { if (r.type === 'quote') { setOpenQuoteId(r.ticket.id); setTab('quotes') } else { setOpenInvoiceId(r.ticket.id); setTab('invoices') } }}>Open</button>
+                </div>
               </div>
             ))}
+          </div>
+          <div className="result-group">
             <h3>Customers ({searchResults.customers.length})</h3>
             {searchResults.customers.length === 0 && <p className="muted">No customers matched.</p>}
             {searchResults.customers.map((c) => (
-              <div key={c.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <span><strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span> · {c.payment_terms} {c.tax_exempt ? '· Tax exempt' : ''}</span>
+              <div key={c.id} className="result-row">
+                <div>
+                  <div className="result-title"><strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span></div>
+                  <div className="result-meta">{c.payment_terms}{c.tax_exempt ? ' · Tax exempt' : ''}</div>
+                </div>
                 <button className="btn secondary" onClick={() => { setSelectedCustomerId(c.id); setTab('customers') }}>Open</button>
               </div>
             ))}
+          </div>
+          <div className="result-group">
             <h3>Vehicles ({searchResults.vehicles.length})</h3>
             {searchResults.vehicles.length === 0 && <p className="muted">No vehicles matched. Try the full VIN, or just the last 6 or 8 characters.</p>}
             {searchResults.vehicles.map((v) => (
-              <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''} · {customerName(v.customer_id)}</span>
+              <div key={v.id} className="result-row">
+                <div>
+                  <div className="result-title"><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong>{v.fleet_unit ? <span className="pill">Unit {v.fleet_unit}</span> : ''}{v.color ? <span className="pill">{v.color}</span> : ''}</div>
+                  <div className="result-meta">VIN {v.vin || '—'} · {customerName(v.customer_id)}</div>
+                </div>
                 <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Open</button>
               </div>
             ))}
           </div>
+          </>
         )}
 
         {tab === 'customers' && (
