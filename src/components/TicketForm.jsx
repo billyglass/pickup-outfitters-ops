@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
+import InvoicePayments from './InvoicePayments.jsx'
 import { normalizeVin } from '../lib/csv.js'
 import { titleCaseName } from '../lib/names.js'
 import {
@@ -597,6 +598,27 @@ export default function TicketForm({
         </tbody>
       </table>
       </section>
+
+      {!isQuote && (
+        <InvoicePayments
+          invoice={ticket}
+          isAdmin={isAdmin}
+          userId={user?.id}
+          readOnly={readOnly}
+          onInvoiceUpdated={(updated) => {
+            // A payment only moves balance / status / version in the DB —
+            // take just those three into the form state so unsaved header
+            // or line edits are never clobbered. The version is updated
+            // too, so a later Save still passes the version check.
+            setTicket((t) => ({
+              ...t,
+              balance_due: updated.balance_due,
+              status: updated.status,
+              version: updated.version,
+            }))
+          }}
+        />
+      )}
 
       <div className="form-grid">
         <div>

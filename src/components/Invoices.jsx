@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -31,6 +31,19 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const [busy, setBusy] = useState('')
   const [saveAs, setSaveAs] = useState(null) // walk-in invoice to save as a customer
   const [msg, setMsg] = useState('')
+  // Which invoices have at least one payment — one query for the
+  // "Deposit due" pill. Best effort: pre-migration the table doesn't
+  // exist yet, so the list just shows no pills.
+  const [paidInvoiceIds, setPaidInvoiceIds] = useState(new Set())
+  useEffect(() => {
+    let cancelled = false
+    const ids = (data.invoices || []).map((i) => i.id)
+    if (!ids.length) { setPaidInvoiceIds(new Set()); return }
+    store.listPaymentsForInvoices(ids)
+      .then((rows) => { if (!cancelled) setPaidInvoiceIds(new Set((rows || []).map((r) => r.invoice_id))) })
+      .catch(() => { if (!cancelled) setPaidInvoiceIds(new Set()) })
+    return () => { cancelled = true }
+  }, [data.invoices]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
   // Walk-in invoices show the buyer's name from the snapshot, with a tag.
@@ -162,7 +175,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}) · ${openValue.toFixed(2)} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
-      <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments are Phase 3 (Admin only). Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments: open an invoice and use the Payments section — deposits and partial payments, as many as the customer makes; the balance and status update on their own, and deleting a payment is Admin-only. Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
       {msg && <div className="success">{msg}</div>}
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>
@@ -211,6 +224,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             const bedSize = inv.vehicle_snapshot?.bed_size || v?.bed_size || ''
             const color = inv.vehicle_snapshot?.color || v?.color || ''
             const overdue = isOverdue(inv)
+            const depositDue = ['Draft', 'Issued'].includes(inv.status) && isCodTicket(inv) && !paidInvoiceIds.has(inv.id)
             return (
               <tr key={inv.id}>
                 <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
@@ -219,7 +233,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
                 <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
                 <td className="nowrap">{nameOf(inv.salesperson_id)}</td>
-                <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}</td>
+                <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${Number(inv.total || 0).toFixed(2)}</td>
                 <td className="num">${Number(inv.balance_due ?? inv.total ?? 0).toFixed(2)}</td>
                 <td>

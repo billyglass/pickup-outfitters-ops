@@ -1,4 +1,4 @@
-import { money, computeTotals, lineTotal, laborAmount, fmtDate } from '../lib/tickets.js'
+import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents } from '../lib/tickets.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
@@ -120,6 +120,9 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
               <tr><td>Tax ({(taxRate * 100).toFixed(2)}%)</td><td>${money(totals.taxTotal)}</td></tr>
               <tr><td>Labor</td><td>${money(totals.labor)}</td></tr>
               <tr><td><strong>Total</strong></td><td><strong>${money(totals.total)}</strong></td></tr>
+              {!isQuote && roundCents(totals.total - Number(ticket.balance_due ?? totals.total)) > 0 && (
+                <tr><td>Paid</td><td>${money(roundCents(totals.total - Number(ticket.balance_due ?? totals.total)))}</td></tr>
+              )}
               {!isQuote && <tr><td>Balance due</td><td>${money(ticket.balance_due ?? totals.total)}</td></tr>}
             </tbody>
           </table>

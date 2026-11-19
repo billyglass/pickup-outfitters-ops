@@ -412,6 +412,23 @@ create index if not exists invoice_lines_invoice_idx on public.invoice_lines (in
 create index if not exists invoice_lines_desc_trgm_idx
   on public.invoice_lines using gin (description gin_trgm_ops);
 
+-- invoice_payments (Phase 3, payments piece — migration 016): one row per
+-- payment on an invoice. A deposit is just a payment; the invoice's
+-- balance_due / status are derived from these rows. Delete is Admin-only.
+create table if not exists public.invoice_payments (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references public.invoices (id) on delete cascade,
+  amount numeric(12,2) not null,
+  payment_date date not null default CURRENT_DATE,
+  method text,
+  reference text,
+  note text,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists invoice_payments_invoice_idx
+  on public.invoice_payments (invoice_id, payment_date);
+
 -- ---------------------------------------------------------------------------
 -- payments / payment_allocations / vendors / vendor_bills / vendor_payments
 -- (Phase 3 scaffolding — Admin-only tables, see RLS below.)
@@ -629,7 +646,7 @@ $$;
 do $$
 declare t text;
 begin
-  for t in select unnest(array['customers','vehicles','quotes','invoices']) loop
+  for t in select unnest(array['customers','vehicles','quotes','invoices','invoice_payments']) loop
     execute format(
       'drop trigger if exists z_audit_log on public.%I; ' ||
       'create trigger z_audit_log after insert or update or delete on public.%I ' ||
@@ -798,6 +815,7 @@ alter table public.quote_lines enable row level security;
 alter table public.quote_revisions enable row level security;
 alter table public.invoices enable row level security;
 alter table public.invoice_lines enable row level security;
+alter table public.invoice_payments enable row level security;
 alter table public.payments enable row level security;
 alter table public.payment_allocations enable row level security;
 alter table public.vendors enable row level security;
@@ -963,6 +981,21 @@ create policy "invoice_lines update active" on public.invoice_lines for update
   using (public.is_active_user()) with check (public.is_active_user());
 drop policy if exists "invoice_lines delete admin" on public.invoice_lines;
 create policy "invoice_lines delete admin" on public.invoice_lines for delete
+  using (public.is_admin());
+
+-- invoice_payments: any active user can read / record a payment (the
+-- sales counter takes the money); only Admin can delete one.
+drop policy if exists "invoice_payments read active" on public.invoice_payments;
+create policy "invoice_payments read active" on public.invoice_payments for select
+  using (public.is_active_user());
+drop policy if exists "invoice_payments insert active" on public.invoice_payments;
+create policy "invoice_payments insert active" on public.invoice_payments for insert
+  with check (public.is_active_user());
+drop policy if exists "invoice_payments update active" on public.invoice_payments;
+create policy "invoice_payments update active" on public.invoice_payments for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "invoice_payments delete admin" on public.invoice_payments;
+create policy "invoice_payments delete admin" on public.invoice_payments for delete
   using (public.is_admin());
 
 -- Financial tables: Admin only. Sales get a hard deny at the database —

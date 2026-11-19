@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, roundCents, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, roundCents, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
 import { titleCaseName } from './names.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
@@ -9,6 +9,7 @@ import { titleCaseName } from './names.js'
 //     Supabase is connected. Shows a banner; do not use for real data.
 const LS_CUSTOMERS = 'po_ops_customers_v1'
 const LS_CUSTOMER_NOTES = 'po_ops_customer_notes_v1'
+const LS_INVOICE_PAYMENTS = 'po_ops_invoice_payments_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
 export class VersionConflict extends Error {
@@ -382,6 +383,21 @@ function localUpsertVehicleFromTicket(customerId, snapshot) {
 async function sbSaveTicket(kind, ticket, lines, userId) {
   const table = ticketTable(kind)
   const totals = computeTotals(lines, ticket.tax_rate, ticket.labor_lump)
+  // Phase 3 payments: an invoice's balance is total minus what has already
+  // been paid — never just the total. Best effort: if the payments table
+  // doesn't exist yet (pre-migration 016) the lookup fails and paid stays
+  // 0, so the save still works exactly as before. A ticket save must never
+  // break because of the payments table.
+  let paidSoFar = 0
+  if (kind === 'invoice' && ticket.id) {
+    try {
+      const { data: pays, error: payErr } = await supabase
+        .from('invoice_payments')
+        .select('amount')
+        .eq('invoice_id', ticket.id)
+      if (!payErr && pays) paidSoFar = roundCents(pays.reduce((s, p) => s + (Number(p.amount) || 0), 0))
+    } catch { /* pre-migration: no payments table yet — paid stays 0 */ }
+  }
   // Vehicle upsert from the ticket's own VIN/YMM fields. For a NEW ticket
   // this runs before the insert; for an EXISTING ticket it runs after the
   // version check below (so a conflicting save never creates/updates a
@@ -427,7 +443,10 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
   } else {
     header.issue_date = ticket.issue_date || null
     header.due_date = ticket.due_date || null
-    header.balance_due = ticket.status === 'Paid' ? 0 : totals.total
+    // Balance and status follow the payments (Draft / Void untouched).
+    const derived = deriveInvoiceBalance(totals.total, paidSoFar, ticket.status)
+    header.balance_due = derived.balanceDue
+    header.status = derived.status
     header.quote_id = ticket.quote_id || null
     if (ticket.idempotency_key) header.idempotency_key = ticket.idempotency_key
   }
@@ -827,12 +846,22 @@ function localSaveTicket(kind, ticket, lines, userId) {
     version: (ticket.version || 0) + 1,
     updated_at: new Date().toISOString(),
   }
+  // Phase 3 payments (local mirror of sbSaveTicket): balance and status
+  // follow the payments — Draft / Void untouched. A new invoice has no
+  // payments yet, so paid is 0 and the balance is the full total.
+  if (kind === 'invoice') {
+    const paidSoFar = ticket.id
+      ? roundCents(localListPayments(ticket.id).reduce((s, p) => s + (Number(p.amount) || 0), 0))
+      : 0
+    const derived = deriveInvoiceBalance(totals.total, paidSoFar, saved.status)
+    saved.balance_due = derived.balanceDue
+    saved.status = derived.status
+  }
   if (!saved.id) {
     saved.id = uid()
     saved.number = `${kind === 'quote' ? 'QT-A' : 'INV-'}${localNextNumber(kind)}`
     saved.created_by = userId
     saved.created_at = saved.updated_at
-    if (kind === 'invoice') saved.balance_due = totals.total
     rows.unshift(saved)
   } else {
     const idx = rows.findIndex((r) => r.id === saved.id)
@@ -1145,6 +1174,159 @@ function localDeleteNote(noteId) {
   lsWrite(LS_CUSTOMER_NOTES, lsRead(LS_CUSTOMER_NOTES, []).filter((n) => n.id !== noteId))
 }
 
+// --- Invoice payments (Phase 3, payments piece) ----------------------------
+// A deposit is just a payment: an invoice takes as many partial payments
+// as the customer makes, each one lowering the balance. balance_due and
+// status are derived from the payments (deriveInvoiceBalance) — Draft and
+// Void are never touched by that logic. Record is any active user; delete
+// is Admin-only (enforced here AND by RLS).
+async function sbListPayments(invoiceId) {
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .select('*')
+    .eq('invoice_id', invoiceId)
+    .order('payment_date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+// Which invoices have at least one payment — one query for the Invoices
+// list "Deposit due" pill. Returns the raw rows (invoice_id only is
+// enough for the pill); callers aggregate.
+async function sbListPaymentsForInvoices(invoiceIds) {
+  if (!invoiceIds?.length) return []
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .select('invoice_id')
+    .in('invoice_id', invoiceIds)
+  if (error) throw error
+  return data || []
+}
+
+// Re-read the invoice + its payments and write back the derived balance
+// and status. Returns the updated invoice row. The invoice_guard trigger
+// still applies: a Sales user can only move an invoice that isn't already
+// Paid / Void / closed — which is exactly the states payments move
+// between (Issued <-> Partially Paid <-> Paid).
+async function sbRecomputeInvoiceBalance(invoiceId) {
+  const { data: inv, error: invErr } = await supabase
+    .from('invoices')
+    .select('id, total, status, balance_due')
+    .eq('id', invoiceId)
+    .single()
+  if (invErr) throw invErr
+  const { data: pays, error: payErr } = await supabase
+    .from('invoice_payments')
+    .select('amount')
+    .eq('invoice_id', invoiceId)
+  if (payErr) throw payErr
+  const paid = roundCents((pays || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))
+  const derived = deriveInvoiceBalance(inv.total, paid, inv.status)
+  const { data: updated, error: updErr } = await supabase
+    .from('invoices')
+    .update({ balance_due: derived.balanceDue, status: derived.status })
+    .eq('id', invoiceId)
+    .select()
+    .single()
+  if (updErr) throw updErr
+  return updated
+}
+
+async function sbRecordPayment(invoiceId, fields, userId) {
+  const amount = roundCents(Number(fields?.amount) || 0)
+  if (!(amount > 0)) throw new Error('Enter a payment amount greater than $0.')
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .insert({
+      invoice_id: invoiceId,
+      amount,
+      payment_date: fields.payment_date || todayStr(),
+      method: fields.method || 'Cash',
+      reference: (fields.reference || '').trim() || null,
+      note: (fields.note || '').trim() || null,
+      created_by: userId || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  const invoice = await sbRecomputeInvoiceBalance(invoiceId)
+  return { payment: data, invoice }
+}
+
+async function sbDeletePayment(paymentId, isAdmin) {
+  if (!isAdmin) throw new Error('Only an Admin can delete a payment.')
+  const { data: pay, error: payErr } = await supabase
+    .from('invoice_payments')
+    .select('invoice_id')
+    .eq('id', paymentId)
+    .single()
+  if (payErr || !pay) throw new Error('Payment not found.')
+  const { error } = await supabase.from('invoice_payments').delete().eq('id', paymentId)
+  if (error) throw error
+  const invoice = await sbRecomputeInvoiceBalance(pay.invoice_id)
+  return { invoice }
+}
+
+function localListPayments(invoiceId) {
+  return lsRead(LS_INVOICE_PAYMENTS, [])
+    .filter((p) => p.invoice_id === invoiceId)
+    .sort((a, b) =>
+      String(b.payment_date || '').localeCompare(String(a.payment_date || '')) ||
+      String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    )
+}
+
+function localListPaymentsForInvoices(invoiceIds) {
+  if (!invoiceIds?.length) return []
+  const set = new Set(invoiceIds)
+  return lsRead(LS_INVOICE_PAYMENTS, [])
+    .filter((p) => set.has(p.invoice_id))
+    .map((p) => ({ invoice_id: p.invoice_id }))
+}
+
+function localRecomputeInvoiceBalance(invoiceId) {
+  const rows = lsRead(LS_INVOICES, [])
+  const idx = rows.findIndex((r) => r.id === invoiceId)
+  if (idx < 0) throw new Error('Invoice not found in local mode.')
+  const inv = rows[idx]
+  const paid = roundCents(localListPayments(invoiceId).reduce((s, p) => s + (Number(p.amount) || 0), 0))
+  const derived = deriveInvoiceBalance(inv.total, paid, inv.status)
+  const next = { ...inv, balance_due: derived.balanceDue, status: derived.status, version: (inv.version || 1) + 1, updated_at: new Date().toISOString() }
+  rows[idx] = next
+  lsWrite(LS_INVOICES, rows)
+  return next
+}
+
+function localRecordPayment(invoiceId, fields, userId) {
+  const amount = roundCents(Number(fields?.amount) || 0)
+  if (!(amount > 0)) throw new Error('Enter a payment amount greater than $0.')
+  const payment = {
+    id: uid(),
+    invoice_id: invoiceId,
+    amount,
+    payment_date: fields.payment_date || todayStr(),
+    method: fields.method || 'Cash',
+    reference: (fields.reference || '').trim() || null,
+    note: (fields.note || '').trim() || null,
+    created_by: userId || null,
+    created_at: new Date().toISOString(),
+  }
+  lsWrite(LS_INVOICE_PAYMENTS, [payment, ...lsRead(LS_INVOICE_PAYMENTS, [])])
+  const invoice = localRecomputeInvoiceBalance(invoiceId)
+  return { payment, invoice }
+}
+
+function localDeletePayment(paymentId, isAdmin) {
+  if (!isAdmin) throw new Error('Only an Admin can delete a payment.')
+  const rows = lsRead(LS_INVOICE_PAYMENTS, [])
+  const pay = rows.find((p) => p.id === paymentId)
+  if (!pay) throw new Error('Payment not found.')
+  lsWrite(LS_INVOICE_PAYMENTS, rows.filter((p) => p.id !== paymentId))
+  const invoice = localRecomputeInvoiceBalance(pay.invoice_id)
+  return { invoice }
+}
+
 export const store = {
   configured: supabaseConfigured,
 
@@ -1259,6 +1441,30 @@ export const store = {
   async deleteNote(noteId) {
     if (!supabaseConfigured) return localDeleteNote(noteId)
     return sbDeleteNote(noteId)
+  },
+
+  // --- Invoice payments (Phase 3) ---
+  // A deposit is just a payment; an invoice takes as many as the customer
+  // makes. Record is any active user; delete is Admin-only.
+  async listPayments(invoiceId) {
+    if (!supabaseConfigured) return localListPayments(invoiceId)
+    return sbListPayments(invoiceId)
+  },
+
+  // One query for the Invoices list "Deposit due" pill.
+  async listPaymentsForInvoices(invoiceIds) {
+    if (!supabaseConfigured) return localListPaymentsForInvoices(invoiceIds)
+    return sbListPaymentsForInvoices(invoiceIds)
+  },
+
+  async recordPayment(invoiceId, fields, userId) {
+    if (!supabaseConfigured) return localRecordPayment(invoiceId, fields, userId)
+    return sbRecordPayment(invoiceId, fields, userId)
+  },
+
+  async deletePayment(paymentId, isAdmin) {
+    if (!supabaseConfigured) return localDeletePayment(paymentId, isAdmin)
+    return sbDeletePayment(paymentId, isAdmin)
   },
 
   // --- Tickets ---

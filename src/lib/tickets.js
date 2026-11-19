@@ -120,6 +120,24 @@ export function dueDateFor(issueDate, terms) {
   return addDays(issueDate, termsDays(terms))
 }
 
+// --- Invoice payments (Phase 3, Nov 19) ----------------------------------
+// A deposit is just a payment: paid is the sum of the invoice's payments,
+// balance = total - paid (negative = overpaid / credit). Status follows
+// ONLY for live invoices — Draft and Void are never touched by this logic:
+// total > 0 and paid >= total -> Paid; paid > 0 -> Partially Paid;
+// otherwise Issued. Pure function — the store layer (Supabase + local)
+// both use it, so the math can never drift between backends.
+export function deriveInvoiceBalance(total, paid, currentStatus) {
+  const t = roundCents(Number(total) || 0)
+  const p = roundCents(Number(paid) || 0)
+  const balanceDue = roundCents(t - p)
+  let status = currentStatus
+  if (['Issued', 'Partially Paid', 'Paid'].includes(currentStatus)) {
+    status = t > 0 && p >= t ? 'Paid' : p > 0 ? 'Partially Paid' : 'Issued'
+  }
+  return { paid: p, balanceDue, status }
+}
+
 // Display a stored YYYY-MM-DD date (or ISO timestamp) as M/D/YYYY —
 // e.g. 2026-11-18 -> 11/18/2026. Storage stays ISO; this is display
 // only. Date <input> controls are untouched (the browser renders those
@@ -395,6 +413,15 @@ export function walkInCustomerSnapshot(name, phone, email) {
 
 export function isWalkInTicket(ticket) {
   return !ticket?.customer_id && !!ticket?.customer_snapshot?.walk_in
+}
+
+// COD check for the deposit-due reminder: the ticket's terms say COD, or
+// it's a walk-in invoice (no customer record — cash on the spot). Terms
+// accounts (Net 15/30/60, Due on receipt) never count. Used by the
+// Payments section and the Invoices list pill.
+export function isCodTicket(ticket) {
+  if (isWalkInTicket(ticket)) return true
+  return /cod/i.test(String(ticket?.payment_terms || ''))
 }
 
 // --- Fleet vs Retail customers ---------------------------------------------
