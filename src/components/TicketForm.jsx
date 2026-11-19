@@ -61,7 +61,13 @@ export default function TicketForm({
   const [status, setStatus] = useState('saved')
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState('')
-  const [customerFilter, setCustomerFilter] = useState('')
+  // Customer picker: type to search — matches drop below, click to pick.
+  const [customerQuery, setCustomerQuery] = useState(() => {
+    const id = (initial || prefill)?.customer_id || (initial || prefill ? null : customers[0]?.id)
+    return customers.find((c) => c.id === id)?.company || ''
+  })
+  const [customerOpen, setCustomerOpen] = useState(false)
+  const [customerHi, setCustomerHi] = useState(0)
   // Walk-in / one-off mode: no customer record — just a name + phone on the
   // ticket (stored in customer_snapshot, customer_id = null). No customer
   // record is created and the customer list is not polluted with one-offs.
@@ -115,9 +121,30 @@ export default function TicketForm({
     setStatus('unsaved')
   }, [vinMatch, vinNorm]) // eslint-disable-line react-hooks/exhaustive-deps
   const totals = useMemo(() => computeTotals(lines, taxRate), [lines, taxRate])
-  const filteredCustomers = customers.filter((c) =>
-    !customerFilter.trim() || c.company.toLowerCase().includes(customerFilter.toLowerCase())
-  )
+  // Suggestions: companies — or their contacts — starting with what was
+  // typed come first, then ones that just contain it. Empty query shows
+  // the first few alphabetically, so clicking the box lists customers.
+  const customerSuggestions = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase()
+    const scored = customers.map((c) => {
+      const names = [c.company, ...contacts.filter((ct) => ct.customer_id === c.id).map((ct) => ct.name || '')]
+      const hay = names.map((n) => (n || '').toLowerCase())
+      return {
+        c,
+        starts: q !== '' && hay.some((n) => n.startsWith(q)),
+        contains: q === '' || hay.some((n) => n.includes(q)),
+      }
+    }).filter((s) => s.contains)
+    scored.sort((a, b) => (b.starts - a.starts) || a.c.company.localeCompare(b.c.company))
+    return scored.map((s) => s.c)
+  }, [customers, contacts, customerQuery])
+  const shownSuggestions = customerSuggestions.slice(0, 8)
+
+  function pickCustomer(c) {
+    patch({ customer_id: c.id })
+    setCustomerQuery(c.company)
+    setCustomerOpen(false)
+  }
 
   // Edit rules: Sales edit Open quotes and Draft / Issued / Partially Paid
   // invoices. Lost quotes and converted quotes (won — they live as invoices
@@ -281,11 +308,53 @@ export default function TicketForm({
             </>
           ) : (
             <>
-              <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter customers…" disabled={readOnly} />
-              <select value={ticket.customer_id || ''} disabled={readOnly} onChange={(e) => patch({ customer_id: e.target.value })}>
-                <option value="">— Choose customer —</option>
-                {filteredCustomers.map((c) => <option key={c.id} value={c.id}>{c.company} ({customerTypeOf(c)})</option>)}
-              </select>
+              <div className="combo" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setCustomerOpen(false) }}>
+                <input
+                  value={customerQuery}
+                  disabled={readOnly}
+                  autoComplete="off"
+                  placeholder="Type a customer name — e.g. rei…"
+                  onFocus={() => { setCustomerOpen(true); setCustomerHi(0) }}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setCustomerQuery(v)
+                    setCustomerOpen(true)
+                    setCustomerHi(0)
+                    if (!v.trim()) patch({ customer_id: '' })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setCustomerOpen(true); setCustomerHi((h) => Math.min(h + 1, shownSuggestions.length - 1)) }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); setCustomerHi((h) => Math.max(h - 1, 0)) }
+                    else if (e.key === 'Enter') { e.preventDefault(); if (customerOpen && shownSuggestions[customerHi]) pickCustomer(shownSuggestions[customerHi]) }
+                    else if (e.key === 'Escape') { setCustomerOpen(false) }
+                  }}
+                />
+                {customerQuery && !readOnly && (
+                  <button type="button" className="combo-clear" aria-label="Clear customer" onClick={() => { setCustomerQuery(''); patch({ customer_id: '' }); setCustomerOpen(true) }}>×</button>
+                )}
+                {customerOpen && !readOnly && (
+                  <div className="combo-list" role="listbox">
+                    {shownSuggestions.length === 0 ? (
+                      <div className="combo-item muted">No customers match “{customerQuery.trim()}”. Try fewer letters, or use Walk-in below.</div>
+                    ) : (
+                      shownSuggestions.map((c, i) => (
+                        <div
+                          key={c.id} role="option" aria-selected={i === customerHi}
+                          className={`combo-item${i === customerHi ? ' active' : ''}${c.id === ticket.customer_id ? ' selected' : ''}`}
+                          onMouseDown={(e) => { e.preventDefault(); pickCustomer(c) }}
+                          onMouseEnter={() => setCustomerHi(i)}
+                        >
+                          <strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span>
+                          <span className="muted small"> · {c.payment_terms}{c.tax_exempt ? ' · Tax exempt' : ''}</span>
+                        </div>
+                      ))
+                    )}
+                    {customerSuggestions.length > shownSuggestions.length && (
+                      <div className="combo-foot muted small">Showing {shownSuggestions.length} of {customerSuggestions.length} matches — keep typing to narrow it down.</div>
+                    )}
+                  </div>
+                )}
+              </div>
               {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
             </>
           )}
