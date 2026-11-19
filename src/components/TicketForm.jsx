@@ -320,6 +320,8 @@ export default function TicketForm({
       {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
       {initial && <p className="muted small">Created by {profiles.find((p) => p.id === initial.created_by)?.name || '—'} · Salesperson {profiles.find((p) => p.id === initial.salesperson_id)?.name || '—'} · Version {initial.version} · {initial.updated_at ? `Last updated ${fmtDate(initial.updated_at)}` : ''}</p>}
 
+      <section className="ticket-section">
+      <h3>Customer</h3>
       <div className="form-grid">
         <div>
           <label>Customer *</label>
@@ -413,7 +415,9 @@ export default function TicketForm({
           )}
         </div>
       </div>
+      </section>
 
+      <section className="ticket-section">
       <h3>Vehicle</h3>
       <div className="vehicle-row" style={prefill ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
         <div>
@@ -463,6 +467,7 @@ export default function TicketForm({
       {vinNorm && vinNorm.length !== 17 && <div className="warn">This VIN is {vinNorm.length} characters — a full VIN is 17. Check for a typo. You can still save.</div>}
       {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}
       {prefill && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
+      </section>
 
       <div className="form-grid">
         <div>
@@ -509,6 +514,7 @@ export default function TicketForm({
         )}
       </div>
 
+      <section className="ticket-section">
       <h3>Line items</h3>
       {lines.map((line, i) => (
         <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 10 }}>
@@ -545,7 +551,9 @@ export default function TicketForm({
         </div>
       ))}
       {!readOnly && <button type="button" className="btn secondary" onClick={() => { setLines([...lines, emptyLine()]); setStatus('unsaved') }}>+ Add line</button>}
+      </section>
 
+      <section className="ticket-section">
       <h3>Totals</h3>
       <table>
         <tbody>
@@ -555,6 +563,7 @@ export default function TicketForm({
           <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>${money(totals.total)}</strong></td></tr>
         </tbody>
       </table>
+      </section>
 
       <div className="form-grid">
         <div>

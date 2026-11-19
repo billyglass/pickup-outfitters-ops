@@ -107,7 +107,12 @@ tr:hover td { background: #fafafa; }
    component, and the @media print block below strips these tints. */
 .ticket-form { background: #fdf8f3; border-color: #e8ddd2; }
 .ticket-form input, .ticket-form select, .ticket-form textarea { background: #fff; }
-.ticket-form h3 { background: #f6ead9; margin: 16px -20px 8px; padding: 8px 20px; border-top: 1px solid #eedfc9; border-bottom: 1px solid #eedfc9; }
+/* Each section is its own white card on the warm form background, so
+   Customer / Vehicle / Line items / Totals read as separate blocks
+   instead of running together. The heading is a tinted band at the top
+   of its card. */
+.ticket-section { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 16px; margin-bottom: 18px; }
+.ticket-section > h3 { background: #f6ead9; margin: 0 -16px 12px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
 .ticket-form .line-card { background: #fffdf9; border-color: #e9dccf; }
 .ticket-form .line-card.line-alt { background: #f8efe4; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .vehicle-sub-row { grid-template-columns: 1fr; } .container { padding: 12px; } }
@@ -142,6 +147,8 @@ tr:hover td { background: #fafafa; }
   /* Strip the ticket form's screen tints if the form itself is printed. */
   .ticket-form { background: #fff !important; }
   .ticket-form h3 { background: none !important; border: 0 !important; margin: 16px 0 6px !important; padding: 0 !important; }
+  .ticket-section { background: #fff !important; border: 0 !important; padding: 0 !important; margin: 0 0 12px !important; }
+  .ticket-section > h3 { background: none !important; border: 0 !important; margin: 0 0 6px !important; padding: 0 !important; }
   .ticket-form .line-card { background: #fff !important; }
 }
 .logo-mark { font-size: 28px; font-weight: 800; }
