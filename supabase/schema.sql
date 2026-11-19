@@ -147,6 +147,8 @@ create table if not exists public.customers (
   company text not null,
   customer_type text not null default 'Retail' check (customer_type in ('Retail', 'Fleet')),
   fleet_size integer,
+  flag text,
+  flag_note text,
   tax_exempt boolean not null default false,
   tax_exempt_doc_note text,
   payment_terms text not null default 'Net 30',

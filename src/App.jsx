@@ -518,8 +518,11 @@ export default function App() {
             ) : selectedCustomer ? (
               <>
               <div className="card">
+                {selectedCustomer.flag && (
+                  <div className="flag-banner">⚠ Flag: <strong>{selectedCustomer.flag}</strong>{selectedCustomer.flag_note ? ` — ${selectedCustomer.flag_note}` : ''}</div>
+                )}
                 <div className="row-between">
-                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span>{selectedCustomer.customer_type === 'Fleet' && selectedCustomer.fleet_size ? <span className="pill">~{selectedCustomer.fleet_size} vehicles</span> : ''}</h2>
+                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
                   <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
                 </div>
                 <p className="muted">
@@ -581,7 +584,7 @@ export default function App() {
                   <tbody>
                     {customers.map((c) => (
                       <tr key={c.id}>
-                        <td><strong>{c.company}</strong></td>
+                        <td><strong>{c.company}</strong>{c.flag ? <span className="flag-pill" style={{ marginLeft: 6 }}>{c.flag}</span> : ''}</td>
                         <td><span className="pill">{customerTypeOf(c)}</span></td>
                         <td>{c.payment_terms}</td>
                         <td>{c.tax_exempt ? 'Exempt' : 'Taxable'}</td>

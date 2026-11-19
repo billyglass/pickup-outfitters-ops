@@ -399,7 +399,7 @@ export default function TicketForm({
                           onMouseDown={(e) => { e.preventDefault(); pickCustomer(c) }}
                           onMouseEnter={() => setCustomerHi(i)}
                         >
-                          <strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span>
+                          <strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span>{c.flag ? <span className="flag-pill" style={{ marginLeft: 6 }}>{c.flag}</span> : ''}
                           <span className="muted small"> · {c.payment_terms}{c.tax_exempt ? ' · Tax exempt' : ''}</span>
                         </div>
                       ))
@@ -411,6 +411,9 @@ export default function TicketForm({
                 )}
               </div>
               {customer && <p className="muted small">{customer.payment_terms} · {customer.tax_exempt ? 'Tax exempt' : 'Taxable'}{customer.po_requirements ? ` · PO: ${customer.po_requirements}` : ''}</p>}
+              {customer?.flag && (
+                <div className="flag-banner" style={{ marginTop: 12 }}>⚠ Flag: <strong>{customer.flag}</strong>{customer.flag_note ? ` — ${customer.flag_note}` : ''}</div>
+              )}
             </>
           )}
         </div>
