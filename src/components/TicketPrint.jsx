@@ -126,10 +126,6 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         </div>
 
         <p className="print-thanks">Thank You For Your Business</p>
-        <div className="print-sign">
-          <div><span>Signature</span></div>
-          <div><span>Date</span></div>
-        </div>
         {ticket.quote_id && <p className="print-small">Converted from quote — see original quote for revision history.</p>}
         {isQuote && ticket.converted_invoice_id && <p className="print-small">Converted to invoice — see invoice for the final record.</p>}
       </div>
