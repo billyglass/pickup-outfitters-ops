@@ -92,6 +92,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
       .update({
         company: titleCaseName(customer.company),
         customer_type: customerTypeOf(customer),
+        fleet_size: customer.fleet_size ?? null,
         tax_exempt: customer.tax_exempt,
         tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
         payment_terms: customer.payment_terms || 'Net 30',
@@ -113,6 +114,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
     .insert({
       company: titleCaseName(customer.company),
       customer_type: customerTypeOf(customer),
+      fleet_size: customer.fleet_size ?? null,
       tax_exempt: customer.tax_exempt,
       tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
       payment_terms: customer.payment_terms || 'Net 30',
@@ -1019,6 +1021,72 @@ function applyTicketFilters(tickets, filters = {}) {
 }
 
 // --- Public API -------------------------------------------------------------
+// --- Customer photos (mini-CRM) -------------------------------------------
+// Files live in the private 'customer-photos' Storage bucket; Postgres
+// holds only metadata. Photos are shown via 1-hour signed URLs — the
+// bucket is never public.
+const PHOTO_BUCKET = 'customer-photos'
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024 // 5 MB per file
+
+async function sbListPhotos(customerId) {
+  const { data, error } = await supabase
+    .from('customer_photos')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = data || []
+  const withUrls = await Promise.all(rows.map(async (r) => {
+    const { data: signed, error: signErr } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(r.storage_path, 3600)
+    return { ...r, signedUrl: signErr ? '' : signed?.signedUrl || '' }
+  }))
+  return withUrls
+}
+
+function sanitizeFileName(name) {
+  return (name || 'photo').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 100)
+}
+
+async function sbUploadPhoto(customerId, file, caption, userId) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Only image files can be uploaded.')
+  if (file.size > MAX_PHOTO_BYTES) throw new Error('That file is over the 5 MB limit — pick a smaller image.')
+  const path = `${customerId}/${uid()}-${sanitizeFileName(file.name)}`
+  const { error: upErr } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, file, { contentType: file.type })
+  if (upErr) throw upErr
+  const { data, error } = await supabase
+    .from('customer_photos')
+    .insert({
+      customer_id: customerId,
+      storage_path: path,
+      file_name: file.name,
+      caption: (caption || '').trim() || null,
+      created_by: userId || null,
+    })
+    .select()
+    .single()
+  if (error) {
+    // Don't leave an orphaned file in the bucket if the row insert failed.
+    await supabase.storage.from(PHOTO_BUCKET).remove([path])
+    throw error
+  }
+  const { data: signed } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .createSignedUrl(path, 3600)
+  return { ...data, signedUrl: signed?.signedUrl || '' }
+}
+
+async function sbDeletePhoto(photo) {
+  if (photo?.storage_path) {
+    await supabase.storage.from(PHOTO_BUCKET).remove([photo.storage_path])
+  }
+  const { error } = await supabase.from('customer_photos').delete().eq('id', photo.id)
+  if (error) throw error
+}
+
 export const store = {
   configured: supabaseConfigured,
 
@@ -1095,6 +1163,24 @@ export const store = {
       return
     }
     return sbDeleteVehicle(id)
+  },
+
+  // --- Customer photos (mini-CRM) ---
+  // Local mode has no Storage or photos table: list returns empty and the
+  // UI shows the "available when connected" note instead of the uploader.
+  async listPhotos(customerId) {
+    if (!supabaseConfigured) return []
+    return sbListPhotos(customerId)
+  },
+
+  async uploadPhoto(customerId, file, caption, userId) {
+    if (!supabaseConfigured) throw new Error('Photos are available when connected to the live database.')
+    return sbUploadPhoto(customerId, file, caption, userId)
+  },
+
+  async deletePhoto(photo) {
+    if (!supabaseConfigured) throw new Error('Photos are available when connected to the live database.')
+    return sbDeletePhoto(photo)
   },
 
   // --- Tickets ---

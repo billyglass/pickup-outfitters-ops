@@ -146,6 +146,7 @@ create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   company text not null,
   customer_type text not null default 'Retail' check (customer_type in ('Retail', 'Fleet')),
+  fleet_size integer,
   tax_exempt boolean not null default false,
   tax_exempt_doc_note text,
   payment_terms text not null default 'Net 30',
@@ -535,6 +536,23 @@ create index if not exists attachments_record_idx
   on public.attachments (record_type, record_id);
 
 -- ---------------------------------------------------------------------------
+-- customer_photos — one row per photo on a customer record (mini-CRM).
+-- File bytes live in the private 'customer-photos' Storage bucket; the app
+-- serves 1-hour signed URLs. Deleting the customer deletes its photos.
+-- ---------------------------------------------------------------------------
+create table if not exists public.customer_photos (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers (id) on delete cascade,
+  storage_path text not null,
+  file_name text,
+  caption text,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists customer_photos_customer_idx
+  on public.customer_photos (customer_id);
+
+-- ---------------------------------------------------------------------------
 -- Triggers: updated_at / version bump, and audit logging.
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -768,6 +786,7 @@ alter table public.vendor_payments enable row level security;
 alter table public.installer_job_links enable row level security;
 alter table public.audit_log enable row level security;
 alter table public.attachments enable row level security;
+alter table public.customer_photos enable row level security;
 
 -- profiles: read own row, or any row if Admin. Insert own row (first setup)
 -- or Admin. Update own name/email, or Admin for everything (guard trigger
@@ -969,6 +988,41 @@ create policy "attachments insert active" on public.attachments for insert
 drop policy if exists "attachments delete admin" on public.attachments;
 create policy "attachments delete admin" on public.attachments for delete
   using (public.is_admin());
+
+-- customer_photos: any active user can read/insert/update/delete. A photo
+-- is not a business record, so delete is NOT Admin-only here (the app
+-- still asks for a confirm first).
+drop policy if exists "customer_photos read active" on public.customer_photos;
+create policy "customer_photos read active" on public.customer_photos for select
+  using (public.is_active_user());
+drop policy if exists "customer_photos insert active" on public.customer_photos;
+create policy "customer_photos insert active" on public.customer_photos for insert
+  with check (public.is_active_user());
+drop policy if exists "customer_photos update active" on public.customer_photos;
+create policy "customer_photos update active" on public.customer_photos for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "customer_photos delete active" on public.customer_photos;
+create policy "customer_photos delete active" on public.customer_photos for delete
+  using (public.is_active_user());
+
+-- Private storage bucket for customer photos + its object policies.
+-- The bucket stays private — the app serves 1-hour signed URLs, never
+-- public URLs.
+insert into storage.buckets (id, name, public)
+values ('customer-photos', 'customer-photos', false)
+on conflict (id) do nothing;
+drop policy if exists "customer photos upload" on storage.objects;
+create policy "customer photos upload" on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'customer-photos' and public.is_active_user());
+drop policy if exists "customer photos view" on storage.objects;
+create policy "customer photos view" on storage.objects for select
+  to authenticated
+  using (bucket_id = 'customer-photos' and public.is_active_user());
+drop policy if exists "customer photos delete" on storage.objects;
+create policy "customer photos delete" on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'customer-photos' and public.is_active_user());
 
 -- ---------------------------------------------------------------------------
 -- RLS limitations — read this before relying on the policies above.

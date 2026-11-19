@@ -6,6 +6,7 @@ import { customerTypeOf, ticketCustomerName, fmtDate } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
+import CustomerPhotos from './components/CustomerPhotos.jsx'
 import VehicleForm from './components/VehicleForm.jsx'
 import ImportCustomers from './components/ImportCustomers.jsx'
 import Quotes from './components/Quotes.jsx'
@@ -515,9 +516,10 @@ export default function App() {
                 onDelete={isAdmin && editingCustomer?.id ? () => handleDeleteCustomer(editingCustomer.id, editingCustomer.company) : undefined}
               />
             ) : selectedCustomer ? (
+              <>
               <div className="card">
                 <div className="row-between">
-                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
+                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span>{selectedCustomer.customer_type === 'Fleet' && selectedCustomer.fleet_size ? <span className="pill">~{selectedCustomer.fleet_size} vehicles</span> : ''}</h2>
                   <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
                 </div>
                 <p className="muted">
@@ -560,6 +562,8 @@ export default function App() {
                   <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
                 </div>
               </div>
+              <CustomerPhotos key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} />
+              </>
             ) : (
               <div className="card">
                 <div className="row-between">

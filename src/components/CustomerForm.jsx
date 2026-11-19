@@ -8,7 +8,7 @@ const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', cit
 export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, isAdmin, onSaved, onCancel, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [customer, setCustomer] = useState(
-    initial || { company: '', customer_type: 'Retail', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
+    initial || { company: '', customer_type: 'Retail', fleet_size: null, tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', notes: '', po_requirements: '' }
   )
   const [contacts, setContacts] = useState(
     initialContacts?.length ? initialContacts : [emptyContact()]
@@ -96,6 +96,11 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
           </label>
         </div>
         <p className="muted small">Fleet = a business / fleet account. Retail = a regular retail customer. This is how you separate fleet from retail when searching customers.</p>
+      </div>
+      <div>
+        <label htmlFor="cf-fleet-size">Fleet size (approx. vehicles)</label>
+        <input id="cf-fleet-size" type="number" min="0" step="1" value={customer.fleet_size ?? ''} onChange={(e) => markDirty({ fleet_size: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 42" />
+        <p className="muted small">For fleet accounts — roughly how many vehicles they run. Blank is fine.</p>
       </div>
       <label>
         <input
