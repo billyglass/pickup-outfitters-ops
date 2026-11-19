@@ -95,9 +95,20 @@ tr:hover td { background: #fafafa; }
 .success { background: #e6f4ea; color: var(--green); border: 1px solid #a3d9a5; padding: 10px 12px; border-radius: 6px; margin: 12px 0; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 /* Vehicle section on a ticket: VIN + Year/Make/Model on one line, then
-   Fleet/Unit on the next. */
+   Fleet/Unit (short) + Color side by side on the next. */
 .vehicle-row { display: grid; grid-template-columns: 2.4fr 0.7fr 1fr 1fr; gap: 0 12px; }
-@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } }
+.vehicle-sub-row { display: grid; grid-template-columns: 0.7fr 1.3fr; gap: 0 12px; }
+/* Ticket form (quotes/invoices) — softer on the eyes for all-day use.
+   Layout and field order are unchanged; only the surface changes.
+   Inputs stay white so typing contrast is untouched, and the orange
+   focus ring stays. Print is unaffected: TicketPrint is a separate
+   component, and the @media print block below strips these tints. */
+.ticket-form { background: #fdf8f3; border-color: #e8ddd2; }
+.ticket-form input, .ticket-form select, .ticket-form textarea { background: #fff; }
+.ticket-form h3 { background: #f6ead9; margin: 16px -20px 8px; padding: 8px 20px; border-top: 1px solid #eedfc9; border-bottom: 1px solid #eedfc9; }
+.ticket-form .line-card { background: #fffdf9; border-color: #e9dccf; }
+.ticket-form .line-card.line-alt { background: #f8efe4; }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .vehicle-sub-row { grid-template-columns: 1fr; } .container { padding: 12px; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, plain black-and-white, no backgrounds --- */
 .print-sheet { max-width: 800px; margin: 0 auto; }
@@ -126,6 +137,10 @@ tr:hover td { background: #fafafa; }
   .print-sheet { max-width: none; }
   .print-doc { border: 0; padding: 0; }
   .card { border: 0; padding: 0; }
+  /* Strip the ticket form's screen tints if the form itself is printed. */
+  .ticket-form { background: #fff !important; }
+  .ticket-form h3 { background: none !important; border: 0 !important; margin: 16px 0 6px !important; padding: 0 !important; }
+  .ticket-form .line-card { background: #fff !important; }
 }
 .logo-mark { font-size: 28px; font-weight: 800; }
 .logo-mark span { color: var(--orange); }

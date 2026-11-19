@@ -49,8 +49,9 @@ export default function TicketForm({
     (initialLines?.length ? initialLines : [emptyLine()]).map((l) => normalizeLineForForm(l))
   )
   // Vehicle is entered ON the ticket — VIN + Year/Make/Model on one line,
-  // Fleet/Unit on the next. No separate vehicle step: on save the
-  // ticket's VIN/YMM upserts the Vehicles directory (see store.saveTicket).
+  // Fleet/Unit (short) + Color on the next. No separate vehicle step: on
+  // save the ticket's VIN/YMM upserts the Vehicles directory (see
+  // store.saveTicket).
   // Initial fields come from the ticket snapshot first, then the linked
   // vehicle record (older tickets whose snapshot lacks YMM).
   const [veh, setVeh] = useState(() => {
@@ -116,6 +117,7 @@ export default function TicketForm({
       make: v.make || vinMatch.make || '',
       model: v.model || vinMatch.model || '',
       fleet_unit: v.fleet_unit || vinMatch.fleet_unit || '',
+      color: v.color || vinMatch.color || '',
     }))
     setTicket((t) => (t.vehicle_id === vinMatch.id ? t : { ...t, vehicle_id: vinMatch.id }))
     setStatus('unsaved')
@@ -245,7 +247,7 @@ export default function TicketForm({
   }
 
   return (
-    <form className="card" onSubmit={save}>
+    <form className="card ticket-form" onSubmit={save}>
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
           {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (copy of ${prefill.sourceLabel})` : `New ${isQuote ? 'quote' : 'invoice'}`}
@@ -391,11 +393,17 @@ export default function TicketForm({
           <input value={veh.model || ''} disabled={readOnly} placeholder="F-250" onChange={(e) => { setVeh((v) => ({ ...v, model: e.target.value })); setStatus('unsaved') }} />
         </div>
       </div>
-      <div>
-        <label>Fleet / unit number (optional)</label>
-        <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
+      <div className="vehicle-sub-row">
+        <div>
+          <label>Fleet / unit (optional)</label>
+          <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
+        </div>
+        <div>
+          <label>Color (optional)</label>
+          <input value={veh.color || ''} disabled={readOnly} placeholder="e.g. Red" onChange={(e) => { setVeh((v) => ({ ...v, color: e.target.value })); setStatus('unsaved') }} />
+        </div>
       </div>
-      {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
+      {vinMatch && <p className="muted small">Found in Vehicles — Year/Make/Model, unit and color filled in from that record. Edit anything here if it's wrong; saving updates the vehicle record too.</p>}
       {vinMatchOtherCustomer && <div className="warn">This VIN is already on file under a different customer ({vinMatch.year || ''} {vinMatch.make || ''} {vinMatch.model || ''}). You can still save — check it's not a typo or the wrong customer.</div>}
       {vinNorm && vinNorm.length !== 17 && <div className="warn">This VIN is {vinNorm.length} characters — a full VIN is 17. Check for a typo. You can still save.</div>}
       {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}
@@ -448,7 +456,7 @@ export default function TicketForm({
 
       <h3>Line items</h3>
       {lines.map((line, i) => (
-        <div key={line.id || `new-${i}`} className="card" style={{ padding: 12, marginBottom: 10 }}>
+        <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 10 }}>
           <div className="form-grid">
             <div>
               <label>Description *</label>

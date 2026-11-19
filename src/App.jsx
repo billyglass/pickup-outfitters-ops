@@ -236,7 +236,7 @@ export default function App() {
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
     if (!q) return true
-    return [v.vin_normalized, v.vin, v.fleet_unit, v.make, v.model]
+    return [v.vin_normalized, v.vin, v.fleet_unit, v.color, v.make, v.model]
       .some((f) => String(f || '').toLowerCase().includes(q))
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
@@ -474,7 +474,7 @@ export default function App() {
             {searchResults.vehicles.length === 0 && <p className="muted">No vehicles matched. Try the full VIN, or just the last 6 or 8 characters.</p>}
             {searchResults.vehicles.map((v) => (
               <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'} · {customerName(v.customer_id)}</span>
+                <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''} · {customerName(v.customer_id)}</span>
                 <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Open</button>
               </div>
             ))}
@@ -519,7 +519,7 @@ export default function App() {
                 <h3>Vehicles ({data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).length})</h3>
                 {data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).map((v) => (
                   <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                    <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}</span>
+                    <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''}</span>
                     <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
                   </div>
                 ))}
@@ -605,7 +605,7 @@ export default function App() {
                           <tr>
                             <td>{v.year || ''} {v.make || ''} {v.model || ''}</td>
                             <td>{v.vin || '—'}</td>
-                            <td>{v.fleet_unit || '—'}</td>
+                            <td>{v.fleet_unit ? `Unit ${v.fleet_unit}` : '—'}{v.color ? ` · ${v.color}` : ''}</td>
                             <td>{customerName(v.customer_id)}</td>
                             <td>
                               {vInvoices.length === 0 ? (

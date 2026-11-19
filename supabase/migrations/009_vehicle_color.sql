@@ -1,0 +1,14 @@
+-- 009_vehicle_color.sql — run once in the live Supabase SQL Editor.
+--
+-- Vehicle color (Nov 19, 2026). Bill wants the color next to the fleet /
+-- unit number on tickets, so a truck can be told apart at a glance.
+-- Nullable text, no backfill: existing vehicles simply have no color
+-- until someone types one in.
+--
+-- SEQUENCING — run this BEFORE Bill saves any ticket with a VIN or edits
+-- a vehicle after the matching code deploy. The app sends `color` in the
+-- vehicle insert/update payloads, and PostgREST rejects an unknown column
+-- (PGRST204), which aborts the whole ticket save. Saves with no VIN, and
+-- saves where the vehicle record already matches (link, no write), are
+-- unaffected — but do not rely on that; run the migration first.
+alter table public.vehicles add column if not exists color text;

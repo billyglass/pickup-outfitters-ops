@@ -215,6 +215,7 @@ create table if not exists public.vehicles (
   make text,
   model text,
   fleet_unit text,
+  color text,
   plate text,
   notes text,
   created_by uuid references auth.users (id),

@@ -18,10 +18,12 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   const vin = snapVehicle.vin || vehicle?.vin || ''
   const ymm = [snapVehicle.year ?? vehicle?.year, snapVehicle.make || vehicle?.make, snapVehicle.model || vehicle?.model].filter(Boolean).join(' ')
   const unit = snapVehicle.fleet_unit || vehicle?.fleet_unit || ''
+  const color = snapVehicle.color || vehicle?.color || ''
   // VIN and Year/Make/Model on the SAME line, as on the ticket.
   const vehicleLine = [
     vin ? `VIN: ${vin}` : '',
     ymm || '',
+    color || '',
     unit ? `Unit ${unit}` : '',
   ].filter(Boolean).join(' · ')
   const vehicleText = ymm || '—'
