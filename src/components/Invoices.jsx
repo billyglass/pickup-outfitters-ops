@@ -8,7 +8,7 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
-export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, onOpened }) {
+export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, onOpened, productPrefill, onProductPrefillConsumed }) {
   const [editing, setEditing] = useState(undefined)
   // Open a specific invoice on mount (e.g. clicked from the Vehicles tab).
   const openedRef = useRef(false)
@@ -127,6 +127,25 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         user={user} profile={profile} isAdmin={isAdmin} settings={settings}
         onSaved={async () => { setDuplicating(null); await onReload() }}
         onCancel={() => setDuplicating(null)}
+      />
+    )
+  }
+  // Added from the Products catalog: a NEW Draft invoice with one line
+  // prefilled from the product/service — nothing is saved until the user
+  // picks the customer and clicks Save, which assigns a new INV- number.
+  if (productPrefill) {
+    return (
+      <TicketForm
+        key={`product-${productPrefill.ticket.sourceLabel}`}
+        kind="invoice"
+        initial={null}
+        prefill={productPrefill.ticket}
+        lines={productPrefill.lines}
+        customers={data.customers} vehicles={data.vehicles} contacts={data.contacts} addresses={data.addresses}
+        products={data.products || []} profiles={data.profiles || []}
+        user={user} profile={profile} isAdmin={isAdmin} settings={settings}
+        onSaved={async () => { onProductPrefillConsumed?.(); await onReload() }}
+        onCancel={() => onProductPrefillConsumed?.()}
       />
     )
   }

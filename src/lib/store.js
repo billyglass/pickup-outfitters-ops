@@ -9,6 +9,7 @@ import { titleCaseName } from './names.js'
 //     Supabase is connected. Shows a banner; do not use for real data.
 const LS_CUSTOMERS = 'po_ops_customers_v1'
 const LS_CUSTOMER_NOTES = 'po_ops_customer_notes_v1'
+const LS_PRODUCT_NOTES = 'po_ops_product_notes_v1'
 const LS_INVOICE_PAYMENTS = 'po_ops_invoice_payments_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
@@ -50,8 +51,12 @@ async function sbLoad() {
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
       supabase.from('quote_lines').select('*').order('sort_order', { ascending: true }),
       supabase.from('invoice_lines').select('*').order('sort_order', { ascending: true }),
-      // products has NO cost column by design (cost lives in Admin-only
-      // product_costs) — safe for Sales to read.
+      // products has NO cost column by design (cost lives in product_costs)
+      // — but since Nov 19 (migration 017) product_costs is readable by
+      // every active user, so cost is merged onto each product below and
+      // Sales see it too. That merge is best-effort: pre-migration, Sales
+      // cannot read product_costs (still Admin-only RLS), so costs just
+      // show blank instead of breaking the whole load.
       supabase.from('products').select('*').order('name', { ascending: true }),
       supabase.from('profiles').select('id, name, email, role'),
       supabase.rpc('public_settings'),
@@ -59,6 +64,13 @@ async function sbLoad() {
   for (const r of [customers, contacts, addresses, vehicles, quotes, invoices, quoteLines, invoiceLines, products, profiles]) {
     if (r.error) throw r.error
   }
+  let costByProduct = {}
+  try {
+    const { data: costs, error: costsErr } = await supabase.from('product_costs').select('*')
+    if (!costsErr) {
+      for (const c of costs || []) costByProduct[c.product_id] = Number(c.cost) || 0
+    }
+  } catch { /* costs unavailable (e.g. pre-migration RLS) — blank, load continues */ }
   return {
     customers: customers.data || [],
     contacts: contacts.data || [],
@@ -68,7 +80,7 @@ async function sbLoad() {
     invoices: invoices.data || [],
     quoteLines: quoteLines.data || [],
     invoiceLines: invoiceLines.data || [],
-    products: products.data || [],
+    products: (products.data || []).map((p) => ({ ...p, cost: costByProduct[p.id] ?? 0 })),
     profiles: profiles.data || [],
     settings: settings.data?.[0] || null,
   }
@@ -725,8 +737,13 @@ function localSaveWalkInAsCustomer(kind, ticket, customerType) {
   return { customer, ticket: updated, linkedExisting }
 }
 
-async function sbSaveProduct(product, isAdmin) {
-  if (!isAdmin) throw new Error('Only an Admin can manage products.')
+async function sbSaveProduct(product, isAdmin, userId) {
+  // Shared catalog (Nov 19, migration 017): ANY active user may add/edit
+  // products and services, including cost. Delete stays Admin-only (see
+  // deleteProduct below + RLS). Cost lives in product_costs and is upserted
+  // after the product row exists — if that upsert fails (e.g. pre-migration
+  // 017, when product_costs is still Admin-only RLS for Sales), the save
+  // throws rather than silently dropping the cost.
   const payload = {
     part_number: (product.part_number || '').trim() || null,
     name: (product.name || '').trim(),
@@ -736,14 +753,23 @@ async function sbSaveProduct(product, isAdmin) {
     type: product.type || 'part',
     active: product.active !== false,
   }
+  let data
   if (product.id) {
-    const { data, error } = await supabase.from('products').update(payload).eq('id', product.id).eq('version', product.version).select().single()
+    const { data: updated, error } = await supabase.from('products').update(payload).eq('id', product.id).eq('version', product.version).select().single()
     if (error) throw error
-    return data
+    data = updated
+  } else {
+    const { data: inserted, error } = await supabase.from('products').insert(payload).select().single()
+    if (error) throw error
+    data = inserted
   }
-  const { data, error } = await supabase.from('products').insert(payload).select().single()
-  if (error) throw error
-  return data
+  const { error: costErr } = await supabase.from('product_costs').upsert({
+    product_id: data.id,
+    cost: Number(product.cost) || 0,
+    updated_by: userId || null,
+  })
+  if (costErr) throw costErr
+  return { ...data, cost: Number(product.cost) || 0 }
 }
 
 // --- Local mode -------------------------------------------------------------
@@ -1174,6 +1200,115 @@ function localDeleteNote(noteId) {
   lsWrite(LS_CUSTOMER_NOTES, lsRead(LS_CUSTOMER_NOTES, []).filter((n) => n.id !== noteId))
 }
 
+// --- Product notes log (shared catalog) ---
+// Dated running log on a product/service record, newest first — same shape
+// and rules as customer notes. Any active user may add/delete a note.
+async function sbListProductNotes(productId) {
+  const { data, error } = await supabase
+    .from('product_notes')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+async function sbAddProductNote(productId, body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write the note first.')
+  const { data, error } = await supabase
+    .from('product_notes')
+    .insert({ product_id: productId, body: text, created_by: userId || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+async function sbDeleteProductNote(noteId) {
+  const { error } = await supabase.from('product_notes').delete().eq('id', noteId)
+  if (error) throw error
+}
+
+function localListProductNotes(productId) {
+  return lsRead(LS_PRODUCT_NOTES, [])
+    .filter((n) => n.product_id === productId)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+}
+
+function localAddProductNote(productId, body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write the note first.')
+  const note = { id: uid(), product_id: productId, body: text, created_by: userId || null, created_at: new Date().toISOString() }
+  lsWrite(LS_PRODUCT_NOTES, [note, ...lsRead(LS_PRODUCT_NOTES, [])])
+  return note
+}
+
+function localDeleteProductNote(noteId) {
+  lsWrite(LS_PRODUCT_NOTES, lsRead(LS_PRODUCT_NOTES, []).filter((n) => n.id !== noteId))
+}
+
+// --- Product photos (shared catalog) ---
+// Files live in the private 'product-photos' Storage bucket; Postgres
+// holds only metadata. Photos are shown via 1-hour signed URLs — the
+// bucket is never public. Same shape and rules as customer photos.
+const PRODUCT_PHOTO_BUCKET = 'product-photos'
+
+async function sbListProductPhotos(productId) {
+  const { data, error } = await supabase
+    .from('product_photos')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const rows = data || []
+  const withUrls = await Promise.all(rows.map(async (r) => {
+    const { data: signed, error: signErr } = await supabase.storage
+      .from(PRODUCT_PHOTO_BUCKET)
+      .createSignedUrl(r.storage_path, 3600)
+    return { ...r, signedUrl: signErr ? '' : signed?.signedUrl || '' }
+  }))
+  return withUrls
+}
+
+async function sbUploadProductPhoto(productId, file, caption, userId) {
+  if (!file?.type?.startsWith('image/')) throw new Error('Only image files can be uploaded.')
+  if (file.size > MAX_PHOTO_BYTES) throw new Error('That file is over the 5 MB limit — pick a smaller image.')
+  const path = `${productId}/${uid()}-${sanitizeFileName(file.name)}`
+  const { error: upErr } = await supabase.storage
+    .from(PRODUCT_PHOTO_BUCKET)
+    .upload(path, file, { contentType: file.type })
+  if (upErr) throw upErr
+  const { data, error } = await supabase
+    .from('product_photos')
+    .insert({
+      product_id: productId,
+      storage_path: path,
+      file_name: file.name,
+      caption: (caption || '').trim() || null,
+      created_by: userId || null,
+    })
+    .select()
+    .single()
+  if (error) {
+    // Don't leave an orphaned file in the bucket if the row insert failed.
+    await supabase.storage.from(PRODUCT_PHOTO_BUCKET).remove([path])
+    throw error
+  }
+  const { data: signed } = await supabase.storage
+    .from(PRODUCT_PHOTO_BUCKET)
+    .createSignedUrl(path, 3600)
+  return { ...data, signedUrl: signed?.signedUrl || '' }
+}
+
+async function sbDeleteProductPhoto(photo) {
+  if (photo?.storage_path) {
+    await supabase.storage.from(PRODUCT_PHOTO_BUCKET).remove([photo.storage_path])
+  }
+  const { error } = await supabase.from('product_photos').delete().eq('id', photo.id)
+  if (error) throw error
+}
+
 // --- Invoice payments (Phase 3, payments piece) ----------------------------
 // A deposit is just a payment: an invoice takes as many partial payments
 // as the customer makes, each one lowering the balance. balance_due and
@@ -1443,6 +1578,38 @@ export const store = {
     return sbDeleteNote(noteId)
   },
 
+  // --- Product notes log (shared catalog) ---
+  async listProductNotes(productId) {
+    if (!supabaseConfigured) return localListProductNotes(productId)
+    return sbListProductNotes(productId)
+  },
+
+  async addProductNote(productId, body, userId) {
+    if (!supabaseConfigured) return localAddProductNote(productId, body, userId)
+    return sbAddProductNote(productId, body, userId)
+  },
+
+  async deleteProductNote(noteId) {
+    if (!supabaseConfigured) return localDeleteProductNote(noteId)
+    return sbDeleteProductNote(noteId)
+  },
+
+  // --- Product photos (shared catalog) ---
+  async listProductPhotos(productId) {
+    if (!supabaseConfigured) return []
+    return sbListProductPhotos(productId)
+  },
+
+  async uploadProductPhoto(productId, file, caption, userId) {
+    if (!supabaseConfigured) throw new Error('Photos are available when connected to the live database.')
+    return sbUploadProductPhoto(productId, file, caption, userId)
+  },
+
+  async deleteProductPhoto(photo) {
+    if (!supabaseConfigured) throw new Error('Photos are available when connected to the live database.')
+    return sbDeleteProductPhoto(photo)
+  },
+
   // --- Invoice payments (Phase 3) ---
   // A deposit is just a payment; an invoice takes as many as the customer
   // makes. Record is any active user; delete is Admin-only.
@@ -1573,24 +1740,28 @@ export const store = {
     return updated
   },
 
-  async saveProduct(product, isAdmin) {
+  async saveProduct(product, isAdmin, userId) {
     if (!supabaseConfigured) {
-      if (!isAdmin) throw new Error('Only an Admin can manage products.')
+      // Local mode: cost lives on the product object (same shape as the
+      // merged Supabase rows). Anyone may save; delete stays Admin-only.
       const rows = lsRead(LS_PRODUCTS, [])
       if (product.id) {
         const idx = rows.findIndex((r) => r.id === product.id)
-        if (idx >= 0) rows[idx] = { ...rows[idx], ...product, version: (rows[idx].version || 1) + 1 }
+        if (idx >= 0) rows[idx] = { ...rows[idx], ...product, cost: Number(product.cost) || 0, version: (rows[idx].version || 1) + 1 }
       } else {
-        rows.push({ ...product, id: uid(), version: 1, active: product.active !== false })
+        rows.push({ ...product, id: uid(), version: 1, cost: Number(product.cost) || 0, active: product.active !== false })
       }
       lsWrite(LS_PRODUCTS, rows)
       return rows.find((r) => r.id === product.id) || rows[rows.length - 1]
     }
-    return sbSaveProduct(product, isAdmin)
+    return sbSaveProduct(product, isAdmin, userId)
   },
 
   async deleteProduct(id, isAdmin) {
-    if (!isAdmin) throw new Error('Only an Admin can manage products.')
+    // Delete is open to any active user (Nov 19 — Bill's correction).
+    // The button lives only in the edit form's danger zone, never on a
+    // list row; the two-step confirm in the form is the safety check.
+    // RLS enforces the same rule in the database.
     if (!supabaseConfigured) {
       lsWrite(LS_PRODUCTS, lsRead(LS_PRODUCTS, []).filter((r) => r.id !== id))
       return

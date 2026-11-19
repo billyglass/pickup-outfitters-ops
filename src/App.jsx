@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName, fmtDate } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
@@ -21,7 +21,7 @@ const TABS = [
   { id: 'vehicles', label: 'Vehicles' },
   { id: 'quotes', label: 'Quotes' },
   { id: 'invoices', label: 'Invoices' },
-  { id: 'products', label: 'Products', admin: true },
+  { id: 'products', label: 'Products & services' },
   { id: 'ar', label: 'Receivables', phase: 'Phase 3', admin: true },
   { id: 'ap', label: 'Payables', phase: 'Phase 3', admin: true },
   { id: 'reports', label: 'Reports', phase: 'Phase 4', admin: true },
@@ -59,6 +59,9 @@ export default function App() {
   const [expandedVehicleId, setExpandedVehicleId] = useState(null)
   const [openInvoiceId, setOpenInvoiceId] = useState(null)
   const [openQuoteId, setOpenQuoteId] = useState(null)
+  // Added from the Products catalog: a new Draft invoice prefilled with
+  // one line from the product/service. Consumed by the Invoices tab.
+  const [productInvoicePrefill, setProductInvoicePrefill] = useState(null)
   const [preselectedCustomerId, setPreselectedCustomerId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
@@ -382,7 +385,7 @@ export default function App() {
               </p>
             )}
             <p className="muted small">
-              Sales users see no revenue, margin, cost, or report data anywhere in this system — those areas are Admin-only and blocked in the database.
+              Sales users see no revenue, margin, or report data anywhere in this system — those areas are Admin-only and blocked in the database. Product costs are shared with everyone (Nov 19) so any salesman can price a service.
             </p>
             <div className="card">
               <div className="row-between">
@@ -699,10 +702,10 @@ export default function App() {
           <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => { setOpenInvoiceId(inv.id); setTab('invoices') }} />
         )}
         {tab === 'invoices' && (
-          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} />
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} />
         )}
-        {tab === 'products' && isAdmin && (
-          <Products data={data} isAdmin={isAdmin} onReload={loadData} onError={setError} />
+        {tab === 'products' && (
+          <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />
         )}
         {tab === 'ar' && isAdmin && (
           <Placeholder title="Accounts receivable" phase="Phase 3">

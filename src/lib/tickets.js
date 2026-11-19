@@ -390,6 +390,58 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   return { ticket, lines, sourceLabel: label }
 }
 
+// --- Add a product/service to a new invoice --------------------------------
+// From the Products catalog: builds a NEW Draft invoice prefilled with ONE
+// line from the product/service — nothing is saved here. The caller opens
+// TicketForm with the result; only Save creates the record, with a NEW
+// atomic INV- number, and the user picks the customer first (the form
+// refuses to save with no customer and no walk-in). The prefilled line:
+// description = product name (+ description if it has one), part number if
+// any, unit price = the product's sell price (default_price), quantity 1,
+// taxable = the product's taxable flag, labor $ 0. Invoice-only (not
+// quotes). The ticket carries fromProduct so the form shows the
+// product wording instead of the duplicate wording.
+export function invoiceFromProduct(product, userId, settings) {
+  const issue = todayStr()
+  const lineDescription = [product.name, (product.description || '').trim()]
+    .filter(Boolean)
+    .join(' — ')
+  const ticket = {
+    customer_id: null,
+    customer_snapshot: null,
+    vehicle_id: '',
+    vehicle_snapshot: null,
+    salesperson_id: userId || '',
+    created_by: userId || '',
+    status: 'Draft',
+    po_number: '',
+    payment_terms: settings?.default_payment_terms || 'Net 30',
+    customer_notes: '',
+    internal_notes: `Added from product ${product.name}`,
+    labor_lump: 0,
+    issue_date: issue,
+    due_date: dueDateFor(issue, settings?.default_payment_terms || 'Net 30'),
+    quote_id: null,
+    sourceLabel: product.name,
+    fromProduct: true,
+  }
+  const lines = [{
+    id: null,
+    product_id: null,
+    part_number: product.part_number || '',
+    description: lineDescription || product.name,
+    quantity: 1,
+    unit_price: Number(product.default_price) || 0,
+    labor_amount: 0,
+    discount: 0,
+    taxable: !!product.taxable,
+    line_kind: 'part',
+    line_total: 0,
+    sort_order: 0,
+  }]
+  return { ticket, lines, sourceLabel: product.name, fromProduct: true }
+}
+
 // --- Walk-in / one-off tickets ------------------------------------------------
 // Bill's rule (Nov 18): a quick invoice/quote for a small one-off purchase
 // must NOT require creating a customer record. The ticket just carries a

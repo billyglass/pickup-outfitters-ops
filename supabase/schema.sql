@@ -239,10 +239,15 @@ create index if not exists vehicles_plate_idx on public.vehicles (plate);
 
 -- ---------------------------------------------------------------------------
 -- products — NO cost column here, by design. Cost lives in product_costs
--- (Admin-only, below). That is what makes cost protection enforceable:
--- Postgres has no column-level RLS, and Supabase Authenticated users share
--- one DB role, so column grants cannot distinguish Sales from Admin.
--- Splitting the table is the enforceable separation.
+-- (below). Postgres has no column-level RLS, and Supabase Authenticated
+-- users share one DB role, so column grants cannot distinguish Sales from
+-- Admin. Splitting the table is the enforceable separation.
+-- NOTE (Nov 19, 2026 — Bill's decision, migration 017): the Products tab
+-- is now a SHARED catalog — any active user can view, add, and edit
+-- products/services INCLUDING the cost, so a salesman can price a custom
+-- service when Bill isn't there. The table split stays (cost is still not
+-- a column on products), but product_costs is now readable/writable by
+-- all active users, not Admin-only. Do not re-lock it without asking Bill.
 -- ---------------------------------------------------------------------------
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
@@ -590,6 +595,39 @@ create index if not exists customer_notes_customer_idx
   on public.customer_notes (customer_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
+-- product_notes — dated running log on a product/service record (shared
+-- catalog, migration 017). Same shape as customer_notes. Deleting the
+-- product deletes its notes.
+-- ---------------------------------------------------------------------------
+create table if not exists public.product_notes (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references public.products (id) on delete cascade,
+  body text not null,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists product_notes_product_idx
+  on public.product_notes (product_id, created_at desc);
+
+-- ---------------------------------------------------------------------------
+-- product_photos — one row per photo on a product/service record (shared
+-- catalog, migration 017). File bytes live in the private 'product-photos'
+-- Storage bucket; the app serves 1-hour signed URLs. Deleting the product
+-- deletes its photos.
+-- ---------------------------------------------------------------------------
+create table if not exists public.product_photos (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references public.products (id) on delete cascade,
+  storage_path text not null,
+  file_name text,
+  caption text,
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now()
+);
+create index if not exists product_photos_product_idx
+  on public.product_photos (product_id);
+
+-- ---------------------------------------------------------------------------
 -- Triggers: updated_at / version bump, and audit logging.
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -826,6 +864,8 @@ alter table public.audit_log enable row level security;
 alter table public.attachments enable row level security;
 alter table public.customer_photos enable row level security;
 alter table public.customer_notes enable row level security;
+alter table public.product_notes enable row level security;
+alter table public.product_photos enable row level security;
 
 -- profiles: read own row, or any row if Admin. Insert own row (first setup)
 -- or Admin. Update own name/email, or Admin for everything (guard trigger
@@ -902,7 +942,7 @@ create policy "vehicles delete admin" on public.vehicles for delete
   using (public.is_admin());
 
 -- products (no cost column): any active user can read/write the catalog.
--- Cost is in product_costs, Admin-only, below.
+-- Cost is in product_costs, below.
 drop policy if exists "products all active" on public.products;
 create policy "products all active" on public.products for select
   using (public.is_active_user());
@@ -913,13 +953,26 @@ drop policy if exists "products update active" on public.products;
 create policy "products update active" on public.products for update
   using (public.is_active_user()) with check (public.is_active_user());
 drop policy if exists "products delete admin" on public.products;
-create policy "products delete admin" on public.products for delete
-  using (public.is_admin());
+drop policy if exists "products delete active" on public.products;
+create policy "products delete active" on public.products for delete
+  using (public.is_active_user());
 
--- product_costs: Admin only. This is the enforceable cost protection.
+-- product_costs: any active user can read/write (Nov 19, 2026 — Bill's
+-- decision, migration 017: the shared catalog shows cost to everyone so
+-- salesmen can price services). Delete stays Admin-only.
 drop policy if exists "product_costs admin only" on public.product_costs;
-create policy "product_costs admin only" on public.product_costs for all
-  using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "product_costs read active" on public.product_costs;
+create policy "product_costs read active" on public.product_costs for select
+  using (public.is_active_user());
+drop policy if exists "product_costs insert active" on public.product_costs;
+create policy "product_costs insert active" on public.product_costs for insert
+  with check (public.is_active_user());
+drop policy if exists "product_costs update active" on public.product_costs;
+create policy "product_costs update active" on public.product_costs for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "product_costs delete admin" on public.product_costs;
+create policy "product_costs delete admin" on public.product_costs for delete
+  using (public.is_admin());
 
 -- quotes / invoices / lines: active users read/write; Admin-only delete.
 -- (The invoice_guard trigger additionally locks Paid/Void/closed invoices
@@ -1075,6 +1128,35 @@ drop policy if exists "customer_notes delete active" on public.customer_notes;
 create policy "customer_notes delete active" on public.customer_notes for delete
   using (public.is_active_user());
 
+-- product_notes / product_photos (shared catalog, migration 017): any
+-- active user can read/insert/update/delete — a note or photo is not a
+-- business record, so delete is NOT Admin-only here (the app still asks
+-- for a confirm first), same as customer_notes / customer_photos.
+drop policy if exists "product_notes read active" on public.product_notes;
+create policy "product_notes read active" on public.product_notes for select
+  using (public.is_active_user());
+drop policy if exists "product_notes insert active" on public.product_notes;
+create policy "product_notes insert active" on public.product_notes for insert
+  with check (public.is_active_user());
+drop policy if exists "product_notes update active" on public.product_notes;
+create policy "product_notes update active" on public.product_notes for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "product_notes delete active" on public.product_notes;
+create policy "product_notes delete active" on public.product_notes for delete
+  using (public.is_active_user());
+drop policy if exists "product_photos read active" on public.product_photos;
+create policy "product_photos read active" on public.product_photos for select
+  using (public.is_active_user());
+drop policy if exists "product_photos insert active" on public.product_photos;
+create policy "product_photos insert active" on public.product_photos for insert
+  with check (public.is_active_user());
+drop policy if exists "product_photos update active" on public.product_photos;
+create policy "product_photos update active" on public.product_photos for update
+  using (public.is_active_user()) with check (public.is_active_user());
+drop policy if exists "product_photos delete active" on public.product_photos;
+create policy "product_photos delete active" on public.product_photos for delete
+  using (public.is_active_user());
+
 -- Private storage bucket for customer photos + its object policies.
 -- The bucket stays private — the app serves 1-hour signed URLs, never
 -- public URLs.
@@ -1094,12 +1176,34 @@ create policy "customer photos delete" on storage.objects for delete
   to authenticated
   using (bucket_id = 'customer-photos' and public.is_active_user());
 
+-- Private storage bucket for product photos + its object policies.
+-- The bucket stays private — the app serves 1-hour signed URLs, never
+-- public URLs.
+insert into storage.buckets (id, name, public)
+values ('product-photos', 'product-photos', false)
+on conflict (id) do nothing;
+drop policy if exists "product photos upload" on storage.objects;
+create policy "product photos upload" on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'product-photos' and public.is_active_user());
+drop policy if exists "product photos view" on storage.objects;
+create policy "product photos view" on storage.objects for select
+  to authenticated
+  using (bucket_id = 'product-photos' and public.is_active_user());
+drop policy if exists "product photos delete" on storage.objects;
+create policy "product photos delete" on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'product-photos' and public.is_active_user());
+
 -- ---------------------------------------------------------------------------
 -- RLS limitations — read this before relying on the policies above.
 -- 1. Column-level protection is NOT possible with RLS. Cost is therefore
---    physically separated into product_costs (Admin-only table). If a cost
---    column is ever added to products, Sales WILL be able to select it.
---    Never add cost/margin columns to a Sales-readable table.
+--    physically separated into product_costs (not a column on products).
+--    NOTE (Nov 19, 2026 — Bill's decision, migration 017): product_costs
+--    is now readable/writable by ALL active users, not Admin-only — the
+--    shared catalog shows cost to everyone so salesmen can price services.
+--    Do not re-lock it without asking Bill. If a cost/margin column is
+--    ever added to a Sales-readable table, Sales WILL be able to select it.
 -- 2. Deactivation blocks data via RLS, but does not revoke the Auth JWT
 --    or block login. Also disable the user in Supabase Auth.
 -- 3. SECURITY DEFINER functions (next_*_number, admin_renumber_invoice,

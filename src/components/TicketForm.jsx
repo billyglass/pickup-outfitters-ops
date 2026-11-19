@@ -299,7 +299,7 @@ export default function TicketForm({
     <form className="card ticket-form" onSubmit={save}>
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
-          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${ticket.number || initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (copy of ${prefill.sourceLabel})` : `New ${isQuote ? 'quote' : 'invoice'}`}
+          {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${ticket.number || initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (${prefill.fromProduct ? `from ${prefill.sourceLabel}` : `copy of ${prefill.sourceLabel}`})` : `New ${isQuote ? 'quote' : 'invoice'}`}
           {initial && <span className="pill" style={{ marginLeft: 8 }}>{initial.status}</span>}
           {prefill && <span className="pill" style={{ marginLeft: 8 }}>New — number assigned on save</span>}
         </h2>
@@ -332,10 +332,16 @@ export default function TicketForm({
       )}
       {conflict && <div className="error">{conflict} <button type="button" className="btn secondary" onClick={onCancel}>Reload</button></div>}
       {error && <div className="error">{error}</div>}
-      {prefill && (
+      {prefill && !prefill.fromProduct && (
         <div className="warn">
           <strong>Duplicated from {prefill.sourceLabel}.</strong> Everything is copied — customer, lines, notes, terms, PO.
           Change the VIN and Year/Make/Model below for this fleet unit, then Save. A new number is assigned on save; the original {isQuote ? 'quote' : 'invoice'} is unchanged.
+        </div>
+      )}
+      {prefill && prefill.fromProduct && (
+        <div className="warn">
+          <strong>Added from product: {prefill.sourceLabel}.</strong> One line is already filled in below — sell price, part number, and taxable flag from the catalog.
+          Pick the customer above, check the line, then Save. A new number is assigned on save.
         </div>
       )}
       {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
@@ -443,11 +449,11 @@ export default function TicketForm({
 
       <section className="ticket-section">
       <h3>Vehicle</h3>
-      <div className="vehicle-row" style={prefill ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
+      <div className="vehicle-row" style={prefill && !prefill.fromProduct ? { outline: '2px solid #e67e22', outlineOffset: 4, borderRadius: 4, padding: 4 } : undefined}>
         <div>
           <label>VIN</label>
           <input
-            value={veh.vin || ''} disabled={readOnly} autoFocus={!!prefill} autoComplete="off"
+            value={veh.vin || ''} disabled={readOnly} autoFocus={!!prefill && !prefill.fromProduct} autoComplete="off"
             placeholder="Type the full VIN"
             onChange={(e) => {
               const v = normalizeVin(e.target.value)
@@ -490,7 +496,7 @@ export default function TicketForm({
       {vinMatchOtherCustomer && <div className="warn">This VIN is already on file under a different customer ({vinMatch.year || ''} {vinMatch.make || ''} {vinMatch.model || ''}). You can still save — check it's not a typo or the wrong customer.</div>}
       {vinNorm && vinNorm.length !== 17 && <div className="warn">This VIN is {vinNorm.length} characters — a full VIN is 17. Check for a typo. You can still save.</div>}
       {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}
-      {prefill && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
+      {prefill && !prefill.fromProduct && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
       </section>
 
       <div className="form-grid">
@@ -655,7 +661,7 @@ export default function TicketForm({
           )}
         </div>
       )}
-      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'quotes QT-A…' : 'invoices INV-…'}) — numbers are never typed in by hand.{prefill ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
+      {!initial && <p className="muted small">Saving assigns the number automatically ({isQuote ? 'quotes QT-A…' : 'invoices INV-…'}) — numbers are never typed in by hand.{prefill && !prefill.fromProduct ? ` This is a copy of ${prefill.sourceLabel}; the original is unchanged.` : ''}</p>}
     </form>
   )
 }
