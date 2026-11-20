@@ -144,6 +144,19 @@ export default function App() {
     if (profile) loadData()
   }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Switching to another customer collapses all three history sections.
+  // NOTE: this effect must live above the early returns below (Loading /
+  // password setup / Login). A hook placed after an early return makes
+  // React throw "Rendered more hooks than during the previous render"
+  // (minified error #310) on the first render after sign-in, which
+  // unmounts the whole app to a blank white page. That is what broke
+  // sign-in on 2026-11-20.
+  useEffect(() => {
+    setShowAllProfileInvoices(false)
+    setShowAllProfileVehicles(false)
+    setShowAllProfileQuotes(false)
+  }, [selectedCustomerId])
+
   function onAuthed(u, p) {
     setUser(u)
     setProfile(p)
@@ -288,12 +301,6 @@ export default function App() {
   const profileInvoices = selectedCustomer ? data.invoices.filter((i) => i.customer_id === selectedCustomer.id).sort(byNewestTicket) : []
   const profileQuotes = selectedCustomer ? data.quotes.filter((q) => q.customer_id === selectedCustomer.id).sort(byNewestTicket) : []
   const profileVehicles = selectedCustomer ? data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) : []
-  // Switching to another customer collapses all three history sections.
-  useEffect(() => {
-    setShowAllProfileInvoices(false)
-    setShowAllProfileVehicles(false)
-    setShowAllProfileQuotes(false)
-  }, [selectedCustomerId])
   const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
   // Dashboard (the sales home page): today's tickets, and the open quotes
   // to chase. Dates use the shop's local day, not UTC — an evening ticket
