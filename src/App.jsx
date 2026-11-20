@@ -59,6 +59,11 @@ export default function App() {
   const [expandedVehicleId, setExpandedVehicleId] = useState(null)
   const [openInvoiceId, setOpenInvoiceId] = useState(null)
   const [openQuoteId, setOpenQuoteId] = useState(null)
+  // How a deep-linked ticket opens: 'view' (the print version — the
+  // default) or 'edit' (the form). Plus the tab we came from, so closing
+  // the print view takes us back there instead of dumping us on the list.
+  const [openMode, setOpenMode] = useState('view')
+  const [returnTab, setReturnTab] = useState(null)
   // Added from the Products catalog: a new Draft invoice prefilled with
   // one line from the product/service. Consumed by the Invoices tab.
   const [productInvoicePrefill, setProductInvoicePrefill] = useState(null)
@@ -146,6 +151,29 @@ export default function App() {
     setTab('dashboard')
   }
 
+  // Opening a ticket from search, the dashboard, or a vehicle row:
+  // View shows the print version first (the default); Edit opens the
+  // form. The tab we came from is remembered so closing the print view
+  // takes us back there. The return is only set for View opens — an Edit
+  // open lands on the list when the form closes, as before.
+  function openTicket(type, id, mode = 'view') {
+    if (mode === 'view') setReturnTab(tab)
+    setOpenMode(mode)
+    if (type === 'quote') { setOpenQuoteId(id); setTab('quotes') }
+    else { setOpenInvoiceId(id); setTab('invoices') }
+  }
+  // The print view closed: go back where the ticket was opened from, if
+  // it was opened from somewhere else. Consumed once.
+  function handleViewClosed() {
+    if (returnTab) { const t = returnTab; setReturnTab(null); setTab(t) }
+  }
+  // The user left the view flow (e.g. Edit from the print view, or a nav
+  // click) — the stored return is void, so a later View from the list
+  // doesn't yank them back to an old tab.
+  function clearReturnTab() {
+    if (returnTab) setReturnTab(null)
+  }
+
   async function runSearchFor(q) {
     const query = String(q || '').trim()
     if (!query) return
@@ -153,6 +181,7 @@ export default function App() {
     setSearching(true)
     setError('')
     setSearchSuggestOpen(false)
+    setReturnTab(null)
     try {
       setSearchResults(await globalSearch(query, data, searchFilters))
       setTab('search')
@@ -294,7 +323,7 @@ export default function App() {
         <div className="brand">PICKUP <span>OUTFITTERS</span></div>
         <nav>
           {TABS.filter((t) => !t.admin || isAdmin).map((t) => (
-            <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => { setTab(t.id); setEditingCustomer(undefined); setEditingVehicle(undefined) }}>
+            <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => { setTab(t.id); setEditingCustomer(undefined); setEditingVehicle(undefined); setReturnTab(null) }}>
               {t.label}{t.phase ? ` (${t.phase})` : ''}
             </button>
           ))}
@@ -392,12 +421,15 @@ export default function App() {
                 <h2 style={{ margin: 0 }}>Today's tickets ({todaysTickets.length})</h2>
                 <span className="muted small">{fmtDate(todayStr)}</span>
               </div>
-              <p className="muted small">Quotes and invoices created today — newest first. Click Open to pick one up.</p>
+              <p className="muted small">Quotes and invoices created today — newest first. View shows the print version; Edit opens the form.</p>
               {todaysTickets.length === 0 && <p className="muted">No tickets created today yet.</p>}
               {todaysTickets.map(({ type, t }) => (
                 <div key={`${type}-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                   <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} <span className="pill">{type === 'quote' ? 'Quote' : 'Invoice'}</span> · {t.status} · ${Number(t.total || 0).toFixed(2)}</span>
-                  <button className="btn secondary" onClick={() => { if (type === 'quote') { setOpenQuoteId(t.id); setTab('quotes') } else { setOpenInvoiceId(t.id); setTab('invoices') } }}>Open</button>
+                  <span>
+                    <button className="btn small" onClick={() => openTicket(type, t.id, 'view')}>View</button>{' '}
+                    <button className="btn secondary small" onClick={() => openTicket(type, t.id, 'edit')}>Edit</button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -411,7 +443,10 @@ export default function App() {
               {chaseQuotes.slice(0, 8).map((q) => (
                 <div key={q.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                   <span><strong>{ticketCustomerName(q, data.customers)}</strong> · {q.number} · {q.follow_up_on ? `follow up ${fmtDate(q.follow_up_on)}` : `opened ${fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))}`} · ${Number(q.total || 0).toFixed(2)}</span>
-                  <button className="btn secondary" onClick={() => { setOpenQuoteId(q.id); setTab('quotes') }}>Open</button>
+                  <span>
+                    <button className="btn small" onClick={() => openTicket('quote', q.id, 'view')}>View</button>{' '}
+                    <button className="btn secondary small" onClick={() => openTicket('quote', q.id, 'edit')}>Edit</button>
+                  </span>
                 </div>
               ))}
               {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
@@ -472,7 +507,10 @@ export default function App() {
                 </div>
                 <div className="result-side">
                   <strong>${Number(r.ticket.total || 0).toFixed(2)}</strong>
-                  <button className="btn secondary" onClick={() => { if (r.type === 'quote') { setOpenQuoteId(r.ticket.id); setTab('quotes') } else { setOpenInvoiceId(r.ticket.id); setTab('invoices') } }}>Open</button>
+                  <span>
+                    <button className="btn small" onClick={() => openTicket(r.type, r.ticket.id, 'view')}>View</button>{' '}
+                    <button className="btn secondary small" onClick={() => openTicket(r.type, r.ticket.id, 'edit')}>Edit</button>
+                  </span>
                 </div>
               </div>
             ))}
@@ -633,8 +671,8 @@ export default function App() {
                       const { invoices: vInvoices, quotes: vQuotes } = ticketsForVehicle(v)
                       const shown = vInvoices.slice(0, 3)
                       const expanded = expandedVehicleId === v.id
-                      const openInvoice = (inv) => { setOpenInvoiceId(inv.id); setTab('invoices') }
-                      const openQuote = (q) => { setOpenQuoteId(q.id); setTab('quotes') }
+                      const openInvoice = (inv) => openTicket('invoice', inv.id, 'view')
+                      const openQuote = (q) => openTicket('quote', q.id, 'view')
                       return (
                         <Fragment key={v.id}>
                           <tr>
@@ -699,10 +737,10 @@ export default function App() {
         )}
 
         {tab === 'quotes' && (
-          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => { setOpenInvoiceId(inv.id); setTab('invoices') }} />
+          <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} openMode={openMode} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} />
         )}
         {tab === 'invoices' && (
-          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} />
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} openMode={openMode} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} />
         )}
         {tab === 'products' && (
           <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />

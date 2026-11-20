@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -8,14 +8,21 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
-export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, onOpened, productPrefill, onProductPrefillConsumed }) {
+export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn }) {
   const [editing, setEditing] = useState(undefined)
-  // Open a specific invoice on mount (e.g. clicked from the Vehicles tab).
+  // Open a specific invoice on mount (e.g. clicked from search, the
+  // dashboard, or the Vehicles tab). View-first: the print version opens
+  // unless the caller asked for Edit.
   const openedRef = useRef(false)
   useEffect(() => {
     if (!openInvoiceId || openedRef.current) return
     const inv = data.invoices.find((i) => i.id === openInvoiceId)
-    if (inv) { openedRef.current = true; setEditing(inv); onOpened?.() }
+    if (inv) {
+      openedRef.current = true
+      if (openMode === 'edit') { setEditing(inv); onClearReturn?.() }
+      else setPrinting(inv)
+      onOpened?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
@@ -110,7 +117,9 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         customer={data.customers.find((c) => c.id === inv.customer_id)}
         vehicle={data.vehicles.find((v) => v.id === inv.vehicle_id)}
         salespersonName={nameOf(inv.salesperson_id)} settings={settings}
-        onClose={() => setPrinting(null)}
+        onClose={() => { setPrinting(null); onViewClosed?.() }}
+        onEdit={() => { setPrinting(null); setEditing(inv); onClearReturn?.() }}
+        canEdit={canEditTicket('invoice', inv, isAdmin)}
       />
     )
   }
@@ -169,7 +178,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
           await onReload()
         }}
         onCancel={() => setEditing(undefined)}
-        onPrint={editing ? () => setPrinting(editing) : undefined}
+        onView={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onDelete={isAdmin && editing ? () => handleDelete(editing) : undefined}
         onRenumbered={async () => { await onReload() }}
@@ -257,8 +266,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="num">${Number(inv.balance_due ?? inv.total ?? 0).toFixed(2)}</td>
                 <td>
                   <div className="row actions">
-                    <button className="btn secondary small" onClick={() => setEditing(inv)}>Open</button>
-                    <button className="btn secondary small" onClick={() => setPrinting(inv)}>Print</button>
+                    <button className="btn small" onClick={() => setPrinting(inv)}>View</button>
+                    <button className="btn secondary small" onClick={() => setEditing(inv)}>Edit</button>
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
                     {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}

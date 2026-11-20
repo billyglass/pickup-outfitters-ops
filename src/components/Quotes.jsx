@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, canEditTicket } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -12,14 +12,21 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 const STATUSES = ['Open', 'Lost']
 const VIEWS = ['Open', 'Lost', 'All']
 
-export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, onOpened, onOpenInvoice }) {
+export default function Quotes({ data, user, profile, isAdmin, settings, onReload, onError, openQuoteId, openMode, onOpened, onOpenInvoice, onViewClosed, onClearReturn }) {
   const [editing, setEditing] = useState(undefined) // undefined=list, null=new, object=edit
-  // Open a specific quote on mount (e.g. clicked from the Vehicles tab).
+  // Open a specific quote on mount (e.g. clicked from search, the
+  // dashboard, or the Vehicles tab). View-first: the print version opens
+  // unless the caller asked for Edit.
   const openedRef = useRef(false)
   useEffect(() => {
     if (!openQuoteId || openedRef.current) return
     const q = data.quotes.find((x) => x.id === openQuoteId)
-    if (q) { openedRef.current = true; setEditing(q); onOpened?.() }
+    if (q) {
+      openedRef.current = true
+      if (openMode === 'edit') { setEditing(q); onClearReturn?.() }
+      else setPrinting(q)
+      onOpened?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
@@ -139,7 +146,9 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         customer={data.customers.find((c) => c.id === q.customer_id)}
         vehicle={data.vehicles.find((v) => v.id === q.vehicle_id)}
         salespersonName={nameOf(q.salesperson_id)} settings={settings}
-        onClose={() => setPrinting(null)}
+        onClose={() => { setPrinting(null); onViewClosed?.() }}
+        onEdit={() => { setPrinting(null); setEditing(q); onClearReturn?.() }}
+        canEdit={canEditTicket('quote', q, isAdmin)}
       />
     )
   }
@@ -179,7 +188,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
           await onReload()
         }}
         onCancel={() => setEditing(undefined)}
-        onPrint={editing ? () => setPrinting(editing) : undefined}
+        onView={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onConvert={editing && canConvert(editing) ? () => convert(editing, { fromForm: true }) : undefined}
         onDelete={isAdmin && editing?.status === 'Open' ? () => handleDelete(editing) : undefined}
@@ -262,8 +271,8 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                 <td className="num">${Number(q.total || 0).toFixed(2)}</td>
                 <td>
                   <div className="row actions">
-                    <button className="btn secondary small" onClick={() => setEditing(q)}>Open</button>
-                    <button className="btn secondary small" onClick={() => setPrinting(q)}>Print</button>
+                    <button className="btn small" onClick={() => setPrinting(q)}>View</button>
+                    <button className="btn secondary small" onClick={() => setEditing(q)}>Edit</button>
                     <button className="btn secondary small" onClick={() => duplicate(q)}>Duplicate</button>
                     {isWalkInTicket(q) && <button className="btn secondary small" onClick={() => setSaveAs(q)}>Save as customer</button>}
                     {q.status === 'Open' && <button className="btn secondary small" disabled={busy === q.id} onClick={() => markLost(q)}>Mark lost</button>}

@@ -8,6 +8,7 @@ import {
   dueDateFor, termsDays, customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
+  canEditTicket,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -15,7 +16,7 @@ const TAX_RATE = 0.0774
 
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
-  products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onPrint,
+  products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onView,
   prefill, onDuplicate, onConvert, onDelete, onRenumbered,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -162,18 +163,12 @@ export default function TicketForm({
     setCustomerOpen(false)
   }
 
-  // Edit rules: Sales edit Open quotes and Draft / Issued / Partially Paid
-  // invoices. Lost quotes and converted quotes (won — they live as invoices
-  // now) are locked to Sales, as are Paid / Void / closed-period invoices
-  // (the DB invoice_guard enforces this too). Admin may correct any ticket
-  // except a Void one; Admin edits to a Paid invoice keep a revision/audit
+  // Edit rules live in canEditTicket (lib/tickets.js) — the same rules
+  // the print view uses for its Edit button, so the two can never drift.
+  // New tickets are always editable; the DB invoice_guard enforces the
+  // invoice side too. Admin edits to a Paid invoice keep a revision/audit
   // trail via the audit trigger.
-  const lockedForSales =
-    initial && (
-      (isQuote && (initial.status !== 'Open' || initial.converted_invoice_id)) ||
-      (!isQuote && (initial.status === 'Paid' || initial.status === 'Void' || initial.accounting_period_closed))
-    )
-  const editable = !initial || isAdmin ? initial?.status !== 'Void' : !lockedForSales
+  const editable = !initial ? true : canEditTicket(kind, initial, isAdmin)
   const readOnly = !editable
 
   function patch(p, { recomputeDates = false } = {}) {
@@ -656,7 +651,20 @@ export default function TicketForm({
 
       <div className="row" style={{ marginTop: 20 }}>
         {!readOnly && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
-        {initial && onPrint && <button className="btn secondary" type="button" onClick={onPrint}>Print</button>}
+        {initial && onView && (
+          <button
+            className="btn secondary" type="button"
+            onClick={() => {
+              // The print view shows the SAVED ticket, so switching with
+              // unsaved changes drops them — ask once first. The form
+              // itself is not saved by this button.
+              if (status === 'unsaved' && !window.confirm('You have unsaved changes on this ticket. The print view shows the saved version — your unsaved changes will be lost if you switch. Switch to View anyway?')) return
+              onView()
+            }}
+          >
+            View
+          </button>
+        )}
         {initial && onDuplicate && <button className="btn secondary" type="button" onClick={onDuplicate}>Duplicate</button>}
         {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
         <button className="btn secondary" type="button" onClick={onCancel}>Close</button>

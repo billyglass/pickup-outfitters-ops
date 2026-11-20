@@ -12,7 +12,7 @@ import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents } fro
 // NOTES — SUBTOTAL / TAX (7.74%) / LABOR / TOTAL — "Thank You For Your Business"
 // Plain black-and-white, no background colours. VIN and Year/Make/Model
 // print on the SAME line, matching the ticket's Vehicle section.
-export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose }) {
+export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose, onEdit, canEdit = true }) {
   const isQuote = kind === 'quote'
   const taxRate = Number(settings?.tax_rate ?? 0.0774)
   const totals = computeTotals(lines, taxRate, ticket.labor_lump)
@@ -45,6 +45,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
     <div className="print-sheet">
       <div className="print-actions">
         <button className="btn" type="button" onClick={() => window.print()}>Print</button>
+        {onEdit && canEdit && <button className="btn secondary" type="button" onClick={onEdit}>Edit</button>}
         <button className="btn secondary" type="button" onClick={onClose}>Close</button>
       </div>
       <div className="print-doc">

@@ -167,6 +167,23 @@ export function isOverdue(ticket, today = todayStr()) {
   )
 }
 
+// Can this user edit this ticket? The exact rules TicketForm enforces
+// (and the DB invoice_guard backs up): Sales edit Open quotes and Draft /
+// Issued / Partially Paid invoices. Lost quotes and converted quotes are
+// locked to Sales, as are Paid / Void / closed-period invoices. Admin may
+// correct any ticket except a Void one. Used by TicketForm itself and by
+// the print view, which only offers an Edit button when the ticket is
+// editable for the current user.
+export function canEditTicket(kind, ticket, isAdmin) {
+  if (!ticket) return false
+  if (kind === 'quote') {
+    return isAdmin ? true : (ticket.status === 'Open' && !ticket.converted_invoice_id)
+  }
+  return isAdmin
+    ? ticket.status !== 'Void'
+    : (!['Paid', 'Void'].includes(ticket.status) && !ticket.accounting_period_closed)
+}
+
 export function customerSnapshot(customer, contacts, addresses) {
   if (!customer) return null
   const primary = (contacts || []).find((c) => c.customer_id === customer.id && c.is_primary) ||
