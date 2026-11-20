@@ -119,6 +119,22 @@ tr:hover td { background: #fafafa; }
    of its card. */
 .ticket-section { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 16px; margin-bottom: 18px; }
 .ticket-section > h3 { background: #f6ead9; margin: 0 -16px 12px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
+/* Customer profile — same soft treatment as the ticket form: the whole
+   profile sits on the warm background, each block its own white card
+   with a tinted heading band. The flag banner stays at the very top,
+   above the header, so it is never buried. */
+.profile-wrap { background: #fdf8f3; border: 1px solid #e8ddd2; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.profile-header h2 { font-size: 20px; }
+/* Header: account name + meta on top, contacts and addresses side by
+   side below. */
+.profile-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.profile-header-grid h3 { margin-top: 12px; }
+/* Notes + Photos side by side (Notes left, Photos right), stacking on
+   narrow screens. */
+.profile-duo { display: flex; gap: 18px; align-items: stretch; margin-bottom: 18px; }
+.profile-duo > * { flex: 1 1 0; min-width: 0; }
+.profile-duo .ticket-section { margin-bottom: 0; }
+@media (max-width: 900px) { .profile-duo { flex-direction: column; } }
 /* Search results — same card treatment as the ticket form sections, so
    Tickets / Customers / Vehicles read as separate blocks instead of
    running together. Each row has a title line and a muted detail line. */
@@ -139,7 +155,7 @@ tr:hover td { background: #fafafa; }
 .photo-missing { height: 130px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; background: #fafafa; }
 .ticket-form .line-card { background: #fffdf9; border-color: #e9dccf; }
 .ticket-form .line-card.line-alt { background: #f8efe4; }
-@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .vehicle-sub-row { grid-template-columns: 1fr; } .container { padding: 12px; } }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .vehicle-sub-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, plain black-and-white, no backgrounds --- */
 .print-sheet { max-width: 800px; margin: 0 auto; }
@@ -171,6 +187,8 @@ tr:hover td { background: #fafafa; }
   .print-doc { border: 0; padding: 0; }
   .card { border: 0; padding: 0; }
   /* Strip the ticket form's screen tints if the form itself is printed. */
+  .profile-wrap { background: #fff !important; border: 0 !important; padding: 0 !important; }
+  .profile-duo { display: block !important; }
   .ticket-form { background: #fff !important; }
   .ticket-form h3 { background: none !important; border: 0 !important; margin: 16px 0 6px !important; padding: 0 !important; }
   .ticket-section { background: #fff !important; border: 0 !important; padding: 0 !important; margin: 0 0 12px !important; }

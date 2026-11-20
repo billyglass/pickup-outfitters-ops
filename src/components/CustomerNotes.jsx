@@ -33,7 +33,7 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
 
   if (!store.configured) {
     return (
-      <div className="card">
+      <div className="ticket-section">
         <h3 style={{ marginTop: 0 }}>Notes (0)</h3>
         <p className="muted">Notes are available when connected to the live database.</p>
       </div>
@@ -68,7 +68,7 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
   }
 
   return (
-    <div className="card">
+    <div className="ticket-section">
       <h3 style={{ marginTop: 0 }}>Notes ({notes.length})</h3>
       <div>
         <label>Add a note</label>

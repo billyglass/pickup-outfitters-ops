@@ -52,6 +52,11 @@ export default function App() {
   const [customerTypeFilter, setCustomerTypeFilter] = useState('') // '' = All, 'Retail', 'Fleet'
   const [vehicleFilter, setVehicleFilter] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState(null)
+  // Customer profile: each history section (Invoices / Vehicles / Quotes)
+  // shows the most recent 5, expanding to the full list independently.
+  const [showAllProfileInvoices, setShowAllProfileInvoices] = useState(false)
+  const [showAllProfileVehicles, setShowAllProfileVehicles] = useState(false)
+  const [showAllProfileQuotes, setShowAllProfileQuotes] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(undefined) // undefined = list, null = new, object = edit
   const [editingVehicle, setEditingVehicle] = useState(undefined)
   // Vehicles tab: expanded vehicle (full ticket history) + deep-link to open
@@ -276,6 +281,19 @@ export default function App() {
       .some((f) => String(f || '').toLowerCase().includes(q))
   })
   const selectedCustomer = data.customers.find((c) => c.id === selectedCustomerId) || null
+  // Profile history, newest first — Invoices and Quotes by issue date,
+  // Vehicles by when they were added. The profile shows the most recent
+  // 5 of each; the rest are one click away (see the expand buttons).
+  const byNewestTicket = (a, b) => String(b.issue_date || b.created_at || '').localeCompare(String(a.issue_date || a.created_at || ''))
+  const profileInvoices = selectedCustomer ? data.invoices.filter((i) => i.customer_id === selectedCustomer.id).sort(byNewestTicket) : []
+  const profileQuotes = selectedCustomer ? data.quotes.filter((q) => q.customer_id === selectedCustomer.id).sort(byNewestTicket) : []
+  const profileVehicles = selectedCustomer ? data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) : []
+  // Switching to another customer collapses all three history sections.
+  useEffect(() => {
+    setShowAllProfileInvoices(false)
+    setShowAllProfileVehicles(false)
+    setShowAllProfileQuotes(false)
+  }, [selectedCustomerId])
   const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
   // Dashboard (the sales home page): today's tickets, and the open quotes
   // to chase. Dates use the shop's local day, not UTC — an evening ticket
@@ -559,57 +577,104 @@ export default function App() {
               />
             ) : selectedCustomer ? (
               <>
-              <div className="card">
+              <div className="profile-wrap">
                 {selectedCustomer.flag && (
                   <div className="flag-banner">⚠ Flag: <strong>{selectedCustomer.flag}</strong>{selectedCustomer.flag_note ? ` — ${selectedCustomer.flag_note}` : ''}</div>
                 )}
-                <div className="row-between">
-                  <h2 style={{ margin: 0 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
-                  <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
-                </div>
-                <p className="muted">
-                  Terms: {selectedCustomer.payment_terms} · {selectedCustomer.tax_exempt ? 'Tax exempt' : 'Taxable'}
-                  {selectedCustomer.tax_exempt_doc_note ? ` · ${selectedCustomer.tax_exempt_doc_note}` : ''}
-                </p>
-                {selectedCustomer.po_requirements && <p><strong>PO requirements:</strong> {selectedCustomer.po_requirements}</p>}
-              </div>
-              <CustomerNotes key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} profiles={data.profiles} />
-              <div className="card">
-                <h3>Contacts</h3>
-                {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).map((c) => (
-                  <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {c.phone || '—'} · {c.email || '—'}</div>
-                ))}
-                {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No contacts yet.</p>}
-                <h3>Addresses</h3>
-                {data.addresses.filter((a) => a.customer_id === selectedCustomer.id).map((a) => (
-                  <div key={a.id}>{a.address_type}: {a.line1 || ''} {a.city || ''} {a.state || ''} {a.zip || ''}</div>
-                ))}
-                {data.addresses.filter((a) => a.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No addresses yet.</p>}
-                <h3>Vehicles ({data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).length})</h3>
-                {data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).map((v) => (
-                  <div key={v.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                    <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''}</span>
-                    <button className="btn secondary" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
+                <div className="ticket-section profile-header">
+                  <div className="row-between">
+                    <h2 style={{ margin: 0, fontSize: 20 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
+                    <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
                   </div>
-                ))}
-                <h3>History — everything they've bought ({data.quotes.filter((q) => q.customer_id === selectedCustomer.id).length + data.invoices.filter((i) => i.customer_id === selectedCustomer.id).length})</h3>
-                {[...data.quotes.filter((q) => q.customer_id === selectedCustomer.id).map((q) => ({ type: 'Quote', t: q })),
-                  ...data.invoices.filter((i) => i.customer_id === selectedCustomer.id).map((i) => ({ type: 'Invoice', t: i }))]
-                  .sort((a, b) => String(b.t.issue_date || b.t.created_at || '').localeCompare(String(a.t.issue_date || a.t.created_at || '')))
-                  .map(({ type, t }) => (
-                    <div key={`${type}-${t.id}`} style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                      <strong>{t.number}</strong> · {type} · {t.status} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${Number(t.total || 0).toFixed(2)}
-                      {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}
+                  <p className="muted" style={{ marginBottom: 4 }}>
+                    Terms: {selectedCustomer.payment_terms} · {selectedCustomer.tax_exempt ? 'Tax exempt' : 'Taxable'}
+                    {selectedCustomer.tax_exempt_doc_note ? ` · ${selectedCustomer.tax_exempt_doc_note}` : ''}
+                    {selectedCustomer.po_requirements ? ` · PO: ${selectedCustomer.po_requirements}` : ''}
+                  </p>
+                  <div className="profile-header-grid">
+                    <div>
+                      <h3>Contacts</h3>
+                      {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).map((c) => (
+                        <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {c.phone || '—'} · {c.email || '—'}</div>
+                      ))}
+                      {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No contacts yet.</p>}
+                    </div>
+                    <div>
+                      <h3>Addresses</h3>
+                      {data.addresses.filter((a) => a.customer_id === selectedCustomer.id).map((a) => (
+                        <div key={a.id}>{a.address_type}: {a.line1 || ''} {a.city || ''} {a.state || ''} {a.zip || ''}</div>
+                      ))}
+                      {data.addresses.filter((a) => a.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No addresses yet.</p>}
+                    </div>
+                  </div>
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
+                  </div>
+                </div>
+                <div className="profile-duo">
+                  <CustomerNotes key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} profiles={data.profiles} />
+                  <CustomerPhotos key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} />
+                </div>
+                <div className="ticket-section">
+                  <h3>Invoices ({profileInvoices.length})</h3>
+                  {(showAllProfileInvoices ? profileInvoices : profileInvoices.slice(0, 5)).map((t) => (
+                    <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                      <span><strong>{t.number}</strong> · {t.status} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${Number(t.total || 0).toFixed(2)}
+                      {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
+                      <span>
+                        <button className="btn small" onClick={() => openTicket('invoice', t.id, 'view')}>View</button>{' '}
+                        <button className="btn secondary small" onClick={() => openTicket('invoice', t.id, 'edit')}>Edit</button>
+                      </span>
                     </div>
                   ))}
-                {data.quotes.filter((q) => q.customer_id === selectedCustomer.id).length + data.invoices.filter((i) => i.customer_id === selectedCustomer.id).length === 0 && (
-                  <p className="muted">No quotes or invoices for this customer yet.</p>
-                )}
-                <div className="row" style={{ marginTop: 16 }}>
-                  <button className="btn" onClick={() => setEditingCustomer(selectedCustomer)}>Edit customer</button>
+                  {profileInvoices.length === 0 && <p className="muted">No invoices for this customer yet.</p>}
+                  {profileInvoices.length > 5 && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <button className="btn secondary small" onClick={() => setShowAllProfileInvoices(!showAllProfileInvoices)}>
+                        {showAllProfileInvoices ? 'Show less' : `View all invoices (${profileInvoices.length})`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="ticket-section">
+                  <h3>Vehicles ({profileVehicles.length})</h3>
+                  {(showAllProfileVehicles ? profileVehicles : profileVehicles.slice(0, 5)).map((v) => (
+                    <div key={v.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                      <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''}</span>
+                      <button className="btn secondary small" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
+                    </div>
+                  ))}
+                  {profileVehicles.length === 0 && <p className="muted">No vehicles for this customer yet.</p>}
+                  {profileVehicles.length > 5 && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <button className="btn secondary small" onClick={() => setShowAllProfileVehicles(!showAllProfileVehicles)}>
+                        {showAllProfileVehicles ? 'Show less' : `View all vehicles (${profileVehicles.length})`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="ticket-section">
+                  <h3>Quotes ({profileQuotes.length})</h3>
+                  {(showAllProfileQuotes ? profileQuotes : profileQuotes.slice(0, 5)).map((t) => (
+                    <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                      <span><strong>{t.number}</strong> · {t.status} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${Number(t.total || 0).toFixed(2)}
+                      {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
+                      <span>
+                        <button className="btn small" onClick={() => openTicket('quote', t.id, 'view')}>View</button>{' '}
+                        <button className="btn secondary small" onClick={() => openTicket('quote', t.id, 'edit')}>Edit</button>
+                      </span>
+                    </div>
+                  ))}
+                  {profileQuotes.length === 0 && <p className="muted">No quotes for this customer yet.</p>}
+                  {profileQuotes.length > 5 && (
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <button className="btn secondary small" onClick={() => setShowAllProfileQuotes(!showAllProfileQuotes)}>
+                        {showAllProfileQuotes ? 'Show less' : `View all quotes (${profileQuotes.length})`}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-              <CustomerPhotos key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} />
               </>
             ) : (
               <div className="card">

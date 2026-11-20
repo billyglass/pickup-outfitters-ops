@@ -30,7 +30,7 @@ export default function CustomerPhotos({ customerId, userId }) {
 
   if (!store.configured) {
     return (
-      <div className="card">
+      <div className="ticket-section">
         <h3 style={{ marginTop: 0 }}>Photos (0)</h3>
         <p className="muted">Photos are available when connected to the live database.</p>
       </div>
@@ -68,7 +68,7 @@ export default function CustomerPhotos({ customerId, userId }) {
   }
 
   return (
-    <div className="card">
+    <div className="ticket-section">
       <h3 style={{ marginTop: 0 }}>Photos ({photos.length})</h3>
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div>
