@@ -37,10 +37,10 @@ export default function TicketForm({
     if (prefill) return { ...prefill }
     const issue = todayStr()
     // A new ticket starts with NO customer picked — just the open search
-    // bar. Terms start on the shop default; picking a customer brings
-    // their profile terms (or COD for walk-in) via the selection effect
-    // below.
-    const initialTerms = settings?.default_payment_terms || 'Net 30'
+    // bar. Terms start on the shop default (COD — most customers are COD,
+    // Nov 23); picking a customer brings their profile terms (or COD for
+    // walk-in) via the selection effect below.
+    const initialTerms = settings?.default_payment_terms || 'COD'
     return {
       customer_id: '',
       vehicle_id: '',
@@ -211,7 +211,7 @@ export default function TicketForm({
       const next = { ...t, ...p }
       if (recomputeDates && next.issue_date) {
         if (isQuote) next.expires_on = addDays(next.issue_date, settings?.quote_validity_days ?? 15)
-        else next.due_date = dueDateFor(next.issue_date, next.payment_terms || 'Net 30')
+        else next.due_date = dueDateFor(next.issue_date, next.payment_terms || 'COD')
       }
       return next
     })
@@ -560,7 +560,7 @@ export default function TicketForm({
             </div>
             <div>
               <label>Terms</label>
-              <select value={ticket.payment_terms || 'Net 30'} disabled={readOnly} onChange={(e) => patch({ payment_terms: e.target.value }, { recomputeDates: true })}>
+              <select value={ticket.payment_terms || 'COD'} disabled={readOnly} onChange={(e) => patch({ payment_terms: e.target.value }, { recomputeDates: true })}>
                 {TERMS.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>

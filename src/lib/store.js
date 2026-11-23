@@ -112,7 +112,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
         flag_note: customer.flag ? customer.flag_note || null : null,
         tax_exempt: customer.tax_exempt,
         tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
-        payment_terms: customer.payment_terms || 'Net 30',
+        payment_terms: customer.payment_terms || 'COD',
         po_requirements: customer.po_requirements || null,
       })
       .eq('id', customer.id)
@@ -135,7 +135,7 @@ async function sbSaveCustomer(customer, contacts, addresses) {
       flag_note: customer.flag ? customer.flag_note || null : null,
       tax_exempt: customer.tax_exempt,
       tax_exempt_doc_note: customer.tax_exempt_doc_note || null,
-      payment_terms: customer.payment_terms || 'Net 30',
+      payment_terms: customer.payment_terms || 'COD',
       po_requirements: customer.po_requirements || null,
     })
     .select()
@@ -450,7 +450,7 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
       : (userId ? [userId] : []),
     status: ticket.status,
     po_number: ticket.po_number || null,
-    payment_terms: ticket.payment_terms || 'Net 30',
+    payment_terms: ticket.payment_terms || 'COD',
     customer_notes: ticket.customer_notes || null,
     internal_notes: ticket.internal_notes || null,
     customer_snapshot: ticket.customer_snapshot || null,
@@ -585,7 +585,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       issue_date: issueDate,
       due_date: dueDateFor(issueDate, quote.payment_terms),
       po_number: quote.po_number || null,
-      payment_terms: quote.payment_terms || 'Net 30',
+      payment_terms: quote.payment_terms || 'COD',
       customer_notes: quote.customer_notes || null,
       internal_notes: quote.internal_notes || null,
       customer_snapshot: quote.customer_snapshot || null,
@@ -662,7 +662,7 @@ async function sbSaveWalkInAsCustomer(kind, ticket, customerType, userId) {
         company: name,
         customer_type: type,
         tax_exempt: false,
-        payment_terms: 'Net 30',
+        payment_terms: 'COD',
         po_requirements: '',
       },
       [{ name, phone: phone || null, email: email || null, title: '', is_primary: true }],
@@ -722,7 +722,7 @@ function localSaveWalkInAsCustomer(kind, ticket, customerType) {
   } else {
     customer = {
       id: uid(), company: name, customer_type: type, tax_exempt: false,
-      payment_terms: 'Net 30',
+      payment_terms: 'COD',
       version: 1, created_at: now, updated_at: now,
     }
     lsWrite(LS_CUSTOMERS, [customer, ...customers])
@@ -806,7 +806,7 @@ function localLoad() {
     invoiceLines: lsRead(LS_INVOICES, []).flatMap((i) => (i.lines || []).map((l) => ({ ...l, invoice_id: i.id }))),
     products: lsRead(LS_PRODUCTS, []),
     profiles: [],
-    settings: { tax_rate: 0.0774, default_payment_terms: 'Net 30', quote_validity_days: 15, company_name: 'Pickup Outfitters' },
+    settings: { tax_rate: 0.0774, default_payment_terms: 'COD', quote_validity_days: 15, company_name: 'Pickup Outfitters' },
   }
 }
 
@@ -1746,7 +1746,7 @@ export const store = {
           : (userId ? [userId] : []),
         created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
-        po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'Net 30',
+        po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'COD',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,
         customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: localSnapshot || null,
         labor_lump: roundCents(Number(quote.labor_lump) || 0),
@@ -1844,7 +1844,7 @@ export const store = {
       const now = new Date().toISOString()
       const created = rows.map((r) => ({
         id: uid(), company: r.Company, customer_type: 'Retail', tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
-        payment_terms: r.Terms || 'Net 30', po_requirements: '',
+        payment_terms: r.Terms || 'COD', po_requirements: '',
         version: 1, created_at: now, updated_at: now,
       }))
       lsWrite(LS_CUSTOMERS, [...created, ...customers])
@@ -1858,7 +1858,7 @@ export const store = {
           company: r.Company,
           customer_type: 'Retail',
           tax_exempt: /^(y|yes|true|1)$/i.test(r['Tax Exempt'] || ''),
-          payment_terms: r.Terms || 'Net 30',
+          payment_terms: r.Terms || 'COD',
         })
         .select()
         .single()

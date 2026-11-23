@@ -9,7 +9,7 @@ const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', cit
 export default function CustomerForm({ initial, contacts: initialContacts, addresses: initialAddresses, isAdmin, onSaved, onCancel, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [customer, setCustomer] = useState(
-    initial || { company: '', customer_type: 'Retail', flag: '', flag_note: '', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'Net 30', po_requirements: '' }
+    initial || { company: '', customer_type: 'Retail', flag: '', flag_note: '', tax_exempt: false, tax_exempt_doc_note: '', payment_terms: 'COD', po_requirements: '' }
   )
   const [contacts, setContacts] = useState(
     initialContacts?.length ? initialContacts : [emptyContact()]
@@ -77,7 +77,7 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
         </div>
         <div>
           <label htmlFor="cf-terms">Payment terms</label>
-          <select id="cf-terms" value={customer.payment_terms || 'Net 30'} onChange={(e) => markDirty({ payment_terms: e.target.value })}>
+          <select id="cf-terms" value={customer.payment_terms || 'COD'} onChange={(e) => markDirty({ payment_terms: e.target.value })}>
             <option>Due on receipt</option>
             <option>Net 15</option>
             <option>Net 30</option>
