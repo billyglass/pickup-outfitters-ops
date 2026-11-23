@@ -167,9 +167,16 @@ tr:hover td { background: #fafafa; }
 /* "Line 1", "Line 2" — small label at the top of each line card so
    lines are easy to tell apart at a glance. */
 .ticket-form .line-num { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #54684f; margin-bottom: 8px; }
-/* Totals — the Total row reads as the bottom line of the ticket. */
+/* Totals — a compact block hugging the right edge of the section, the
+   way totals sit on the printed ticket: the table shrinks to its
+   content instead of spanning the card, and the labels sit right
+   against the amounts instead of a wide empty gap between them. */
+.ticket-section.totals-section table { width: max-content; max-width: 100%; margin-left: auto; border-collapse: collapse; }
+.ticket-section.totals-section table td { padding: 4px 8px; }
+.ticket-section.totals-section table td:first-child { text-align: right; white-space: nowrap; }
+.ticket-section.totals-section table td:last-child { text-align: right; white-space: nowrap; }
 .ticket-section.totals-section table tr:last-child td { border-top: 2px solid #d8c3a0; font-size: 16px; }
-@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, grayscale only (black / white / grays,
    no color) so it prints on the shop's B&W printer. The doc is a flex
