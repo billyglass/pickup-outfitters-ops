@@ -35,12 +35,13 @@ export default function TicketForm({
     // new atomic number. The original ticket is never touched.
     if (prefill) return { ...prefill }
     const issue = todayStr()
-    // A new ticket starts on the first customer, so it starts on their
-    // terms too — walk-in (COD) and other picks are handled by the
-    // selection effect below.
-    const initialTerms = customers[0]?.payment_terms || settings?.default_payment_terms || 'Net 30'
+    // A new ticket starts with NO customer picked — just the open search
+    // bar. Terms start on the shop default; picking a customer brings
+    // their profile terms (or COD for walk-in) via the selection effect
+    // below.
+    const initialTerms = settings?.default_payment_terms || 'Net 30'
     return {
-      customer_id: customers[0]?.id || '',
+      customer_id: '',
       vehicle_id: '',
       salesperson_id: user?.id || '',
       created_by: user?.id || '',
@@ -78,7 +79,9 @@ export default function TicketForm({
   const [conflict, setConflict] = useState('')
   // Customer picker: type to search — matches drop below, click to pick.
   const [customerQuery, setCustomerQuery] = useState(() => {
-    const id = (initial || prefill)?.customer_id || (initial || prefill ? null : customers[0]?.id)
+    // Editing / duplicating shows that ticket's customer. A brand-new
+    // ticket starts with an empty search bar — no customer pre-filled.
+    const id = (initial || prefill)?.customer_id || null
     return customers.find((c) => c.id === id)?.company || ''
   })
   const [customerOpen, setCustomerOpen] = useState(false)
