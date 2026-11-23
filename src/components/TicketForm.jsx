@@ -8,7 +8,7 @@ import {
   dueDateFor, termsDays, customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
-  canEditTicket,
+  canEditTicket, salespersonNamesOf, canEditSalespeople,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -43,7 +43,9 @@ export default function TicketForm({
     return {
       customer_id: '',
       vehicle_id: '',
-      salesperson_id: user?.id || '',
+      // Multi-salesman (Nov 23): a new ticket starts with just the
+      // logged-in user — more salespeople can be added below before saving.
+      salesperson_ids: user?.id ? [user.id] : [],
       created_by: user?.id || '',
       status: isQuote ? 'Open' : 'Draft',
       po_number: '',
@@ -173,6 +175,13 @@ export default function TicketForm({
   // trail via the audit trigger.
   const editable = !initial ? true : canEditTicket(kind, initial, isAdmin)
   const readOnly = !editable
+  // Salesperson lock (Nov 23): Sales may change the salespeople only
+  // while creating a new ticket (no initial yet — includes duplicates
+  // and "Add to invoice" prefills), or while an invoice is still Draft.
+  // Once a quote is saved or an invoice leaves Draft, the picker is
+  // locked for Sales and only Admin can change who's on the ticket.
+  // Admin can change them on any editable ticket.
+  const salespersonEditable = !readOnly && canEditSalespeople(kind, initial, isAdmin, !initial)
 
   function patch(p, { recomputeDates = false } = {}) {
     setTicket((t) => {
@@ -360,7 +369,7 @@ export default function TicketForm({
         </div>
       )}
       {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
-      {initial && <p className="muted small">Created by {profiles.find((p) => p.id === initial.created_by)?.name || '—'} · Salesperson {profiles.find((p) => p.id === initial.salesperson_id)?.name || '—'} · Version {initial.version} · {initial.updated_at ? `Last updated ${fmtDate(initial.updated_at)}` : ''}</p>}
+      {initial && <p className="muted small">Created by {profiles.find((p) => p.id === initial.created_by)?.name || '—'} · Salesperson {salespersonNamesOf(initial, profiles)} · Version {initial.version} · {initial.updated_at ? `Last updated ${fmtDate(initial.updated_at)}` : ''}</p>}
 
       <section className="ticket-section">
       <h3>Customer</h3>
@@ -462,15 +471,28 @@ export default function TicketForm({
         <div>
           <div className="meta-grid">
             <div>
-              <label>Salesperson</label>
-              {isAdmin ? (
-                <select value={ticket.salesperson_id || ''} disabled={readOnly} onChange={(e) => patch({ salesperson_id: e.target.value })}>
-                  {profiles.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+              <label>Salesperson{(ticket.salesperson_ids || []).length > 1 ? 's' : ''}</label>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                {(ticket.salesperson_ids || []).map((id) => {
+                  const p = profiles.find((x) => x.id === id)
+                  return (
+                    <span key={id} className="pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {p?.name || '—'}
+                      {salespersonEditable && (ticket.salesperson_ids || []).length > 1 && (
+                        <button type="button" aria-label={`Remove ${p?.name || 'salesperson'}`} onClick={() => patch({ salesperson_ids: (ticket.salesperson_ids || []).filter((x) => x !== id) })} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                      )}
+                    </span>
+                  )
+                })}
+                {!(ticket.salesperson_ids || []).length && <span className="muted small">No salesperson yet — add one below.</span>}
+              </div>
+              {salespersonEditable && (
+                <select value="" onChange={(e) => { const v = e.target.value; if (v) patch({ salesperson_ids: [...(ticket.salesperson_ids || []), v] }) }} aria-label="Add salesperson">
+                  <option value="">+ Add salesperson…</option>
+                  {profiles.filter((p) => !(ticket.salesperson_ids || []).includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
                 </select>
-              ) : (
-                <input value={profiles.find((p) => p.id === ticket.salesperson_id)?.name || profile?.name || ''} disabled />
               )}
-              <p className="muted small">Auto-assigned to the logged-in user when created. Admin can reassign.</p>
+              <p className="muted small">Auto-assigned to the logged-in user when created. {salespersonEditable ? 'Add or remove salespeople here — at least one stays on the ticket.' : 'Only an Admin can change the salespeople once this ticket is issued.'}</p>
             </div>
             <div>
               <label>P.O. number</label>

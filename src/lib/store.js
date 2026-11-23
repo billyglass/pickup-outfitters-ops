@@ -435,7 +435,12 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
   const header = {
     customer_id: ticket.customer_id || null, // null = walk-in ticket
     vehicle_id: ticket.vehicle_id || null,
-    salesperson_id: ticket.salesperson_id || userId,
+    // Multi-salesman (Nov 23): the whole salesperson_ids array is saved.
+    // An empty array falls back to the current user so a ticket always
+    // has at least one salesperson.
+    salesperson_ids: (ticket.salesperson_ids || []).filter(Boolean).length
+      ? (ticket.salesperson_ids || []).filter(Boolean)
+      : (userId ? [userId] : []),
     status: ticket.status,
     po_number: ticket.po_number || null,
     payment_terms: ticket.payment_terms || 'Net 30',
@@ -563,7 +568,11 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       quote_id: quote.id,
       customer_id: quote.customer_id || null, // null = walk-in quote converts to a walk-in invoice
       vehicle_id: convertedVehicle?.id || quote.vehicle_id || null,
-      salesperson_id: quote.salesperson_id || userId,
+      // Multi-salesman (Nov 23): the conversion carries the whole
+      // salesperson_ids array from the quote.
+      salesperson_ids: (quote.salesperson_ids || []).filter(Boolean).length
+        ? (quote.salesperson_ids || []).filter(Boolean)
+        : (userId ? [userId] : []),
       created_by: userId,
       status: 'Draft',
       issue_date: issueDate,
@@ -850,6 +859,11 @@ function localSaveTicket(kind, ticket, lines, userId) {
   const localVehicle = localUpsertVehicleFromTicket(ticket.customer_id, ticket.vehicle_snapshot)
   const saved = {
     ...ticket,
+    // Multi-salesman (Nov 23): keep the whole array; an empty array falls
+    // back to the current user so a ticket always has a salesperson.
+    salesperson_ids: (ticket.salesperson_ids || []).filter(Boolean).length
+      ? (ticket.salesperson_ids || []).filter(Boolean)
+      : (userId ? [userId] : []),
     vehicle_id: localVehicle?.id || ticket.vehicle_id || null,
     vehicle_snapshot: localVehicle
       ? vehicleSnapshotFromFields(
@@ -929,7 +943,15 @@ export async function globalSearch(query, state, filters = {}) {
   const customerName = (t) => ticketCustomerName(t, state.customers)
   const vehicleFor = (id) => state.vehicles.find((v) => v.id === id) || null
   const ticketVin = (t) => t.vehicle_snapshot?.vin || vehicleFor(t.vehicle_id)?.vin || ''
-  const salespersonName = (id) => state.profiles?.find((p) => p.id === id)?.name || ''
+  const salespersonNames = (t) => (t.salesperson_ids || [])
+    .map((id) => state.profiles?.find((p) => p.id === id)?.name || '')
+    .filter(Boolean).join(', ')
+  // Profiles whose name matches the query — searching a salesperson's
+  // name finds their tickets (any of a ticket's salespeople counts).
+  const matchedSalespersonIds = lower
+    ? new Set((state.profiles || []).filter((p) => String(p.name || '').toLowerCase().includes(lower)).map((p) => p.id))
+    : new Set()
+  const isSalespersonMatch = (t) => (t.salesperson_ids || []).some((id) => matchedSalespersonIds.has(id))
   // Does the query match a walk-in ticket's snapshot name / phone?
   const walkInMatches = (t) => {
     if (!isWalkInTicket(t) || !lower) return false
@@ -956,11 +978,12 @@ export async function globalSearch(query, state, filters = {}) {
       matchedCustomerIds.has(v.customer_id)
     )
     const tickets = []
-    const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
+    const pushTicket = (type, t, match) => tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonNames(t), match })
     for (const t of state.quotes) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('quote', t, 'VIN')
       else if (t.customer_id && matchedCustomerIds.has(t.customer_id)) pushTicket('quote', t, 'Customer')
+      else if (isSalespersonMatch(t)) pushTicket('quote', t, 'Salesperson')
       else if (walkInMatches(t)) pushTicket('quote', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('quote', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower)) pushTicket('quote', t, 'Number / PO')
@@ -969,6 +992,7 @@ export async function globalSearch(query, state, filters = {}) {
       const lines = (t.lines || []).filter((l) => String(l.description || '').toLowerCase().includes(lower) || String(l.part_number || '').toLowerCase().includes(lower))
       if (vinMatches(ticketVin(t))) pushTicket('invoice', t, 'VIN')
       else if (t.customer_id && matchedCustomerIds.has(t.customer_id)) pushTicket('invoice', t, 'Customer')
+      else if (isSalespersonMatch(t)) pushTicket('invoice', t, 'Salesperson')
       else if (walkInMatches(t)) pushTicket('invoice', t, 'Walk-in name / phone')
       else if (lines.length) pushTicket('invoice', t, `Line item: ${lines[0].description}`)
       else if (String(t.number || '').toLowerCase().includes(lower) || String(t.po_number || '').toLowerCase().includes(lower) || (t.previous_numbers || []).some((n) => String(n).toLowerCase().includes(lower))) pushTicket('invoice', t, 'Number / PO')
@@ -1003,7 +1027,7 @@ export async function globalSearch(query, state, filters = {}) {
   const pushTicket = (type, t, match) => {
     if (!t || ticketById.has(`${type}:${t.id}`)) return
     ticketById.set(`${type}:${t.id}`, true)
-    tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonName(t.salesperson_id), match })
+    tickets.push({ type, ticket: t, customer: customerName(t), vin: ticketVin(t), salesperson: salespersonNames(t), match })
   }
   for (const t of quotes.data || []) pushTicket('quote', t, 'Number / PO')
   for (const t of invoices.data || []) pushTicket('invoice', t, 'Number / PO')
@@ -1062,6 +1086,20 @@ export async function globalSearch(query, state, filters = {}) {
     const seenVeh = new Set(vehicleRows.map((v) => v.id))
     for (const v of vByCust || []) if (!seenVeh.has(v.id)) vehicleRows.push(v)
   }
+  // Salesperson-name matches -> that salesperson's tickets. Any of a
+  // ticket's salespeople counts. Best effort: pre-migration 018 the
+  // column doesn't exist yet, so the query fails and this match type is
+  // just skipped — the rest of the search still works.
+  if (matchedSalespersonIds.size) {
+    for (const spId of matchedSalespersonIds) {
+      try {
+        const { data: qBySp } = await supabase.from('quotes').select('*').contains('salesperson_ids', [spId])
+        for (const t of qBySp || []) pushTicket('quote', t, 'Salesperson')
+        const { data: iBySp } = await supabase.from('invoices').select('*').contains('salesperson_ids', [spId])
+        for (const t of iBySp || []) pushTicket('invoice', t, 'Salesperson')
+      } catch { /* pre-migration: no salesperson_ids column yet */ }
+    }
+  }
   return {
     customers: customers.data || [],
     contacts: contacts.data || [],
@@ -1077,7 +1115,7 @@ function applyTicketFilters(tickets, filters = {}) {
     if (filters.status && t.status !== filters.status) return false
     if (filters.customerId === 'walk-in' && t.customer_id) return false
     if (filters.customerId && filters.customerId !== 'walk-in' && t.customer_id !== filters.customerId) return false
-    if (filters.salespersonId && t.salesperson_id !== filters.salespersonId) return false
+    if (filters.salespersonId && !(t.salesperson_ids || []).includes(filters.salespersonId)) return false
     const d = t.issue_date || (t.created_at || '').slice(0, 10)
     if (filters.from && d < filters.from) return false
     if (filters.to && d > filters.to) return false
@@ -1678,7 +1716,12 @@ export const store = {
       const invoice = {
         id: uid(), number: `INV-${localNextNumber('invoice')}`,
         quote_id: quote.id, customer_id: quote.customer_id || null, vehicle_id: localVehicle?.id || quote.vehicle_id || null,
-        salesperson_id: quote.salesperson_id || userId, created_by: userId, status: 'Draft',
+        // Multi-salesman (Nov 23): the local conversion carries the whole
+        // salesperson_ids array from the quote.
+        salesperson_ids: (quote.salesperson_ids || []).filter(Boolean).length
+          ? (quote.salesperson_ids || []).filter(Boolean)
+          : (userId ? [userId] : []),
+        created_by: userId, status: 'Draft',
         issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'Net 30',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,

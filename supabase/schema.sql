@@ -295,7 +295,11 @@ create table if not exists public.quotes (
   -- record — name + phone live in customer_snapshot, customer_id is null.
   customer_id uuid references public.customers (id),
   vehicle_id uuid references public.vehicles (id),
+  -- Legacy (Nov 23): superseded by salesperson_ids below — a ticket now
+  -- carries an array of salespeople (two salesmen can work one ticket).
+  -- Kept for history; the app no longer reads or writes this column.
   salesperson_id uuid references auth.users (id),
+  salesperson_ids uuid[] not null default '{}',
   created_by uuid references auth.users (id),
   status text not null default 'Open'
     check (status in ('Open', 'Lost')),
@@ -366,7 +370,9 @@ create table if not exists public.invoices (
   -- Nullable (migration 003): walk-in / one-off tickets, see quotes above.
   customer_id uuid references public.customers (id),
   vehicle_id uuid references public.vehicles (id),
+  -- Legacy (Nov 23): superseded by salesperson_ids below — see quotes.
   salesperson_id uuid references auth.users (id),
+  salesperson_ids uuid[] not null default '{}',
   created_by uuid references auth.users (id),
   status text not null default 'Draft'
     check (status in ('Draft', 'Issued', 'Partially Paid', 'Paid', 'Void')),

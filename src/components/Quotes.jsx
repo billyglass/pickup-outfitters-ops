@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, canEditTicket } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, canEditTicket, salespersonNamesOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -40,7 +40,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   const [convertedInvoice, setConvertedInvoice] = useState(null) // { id, number } of the invoice just created / already linked
   const [saveAs, setSaveAs] = useState(null) // walk-in quote to save as a customer
 
-  const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
+  const namesOf = (t) => salespersonNamesOf(t, data.profiles)
   // Walk-in quotes show the buyer's name from the snapshot, with a tag.
   const customerOf = (q) => ticketCustomerName(q, data.customers)
   const linesOf = (id) => (data.quoteLines || []).filter((l) => l.quote_id === id)
@@ -60,7 +60,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       if (view === 'Lost' && q.status !== 'Lost') return false
       if (fCustomer === 'walk-in' && q.customer_id) return false
       if (fCustomer && fCustomer !== 'walk-in' && q.customer_id !== fCustomer) return false
-      if (fSales && q.salesperson_id !== fSales) return false
+      if (fSales && !(q.salesperson_ids || []).includes(fSales)) return false
       if (fAge) {
         const age = ageDays(q.issue_date || (q.created_at || '').slice(0, 10)) ?? 0
         if (fAge === '<7' && age >= 7) return false
@@ -145,7 +145,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         kind="quote" ticket={q} lines={linesOf(q.id)}
         customer={data.customers.find((c) => c.id === q.customer_id)}
         vehicle={data.vehicles.find((v) => v.id === q.vehicle_id)}
-        salespersonName={nameOf(q.salesperson_id)} settings={settings}
+        salespersonName={namesOf(q)} settings={settings}
         onClose={() => { setPrinting(null); onViewClosed?.() }}
         onEdit={() => { setPrinting(null); setEditing(q); onClearReturn?.() }}
         canEdit={canEditTicket('quote', q, isAdmin)}
@@ -266,7 +266,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                 <td className="customer" title={customerOf(q)}>{customerOf(q)}{isWalkInTicket(q) && <div className="muted small">Walk-in</div>}</td>
                 <td className="nowrap">{fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))}</td>
                 <td className="nowrap">{age ?? '—'}d</td>
-                <td className="nowrap">{nameOf(q.salesperson_id)}</td>
+                <td className="nowrap">{namesOf(q)}</td>
                 <td className="nowrap">{q.status}</td>
                 <td className="num">${Number(q.total || 0).toFixed(2)}</td>
                 <td>

@@ -184,6 +184,39 @@ export function canEditTicket(kind, ticket, isAdmin) {
     : (!['Paid', 'Void'].includes(ticket.status) && !ticket.accounting_period_closed)
 }
 
+// --- Multiple salespeople per ticket (Nov 23) ------------------------------
+// Two salesmen sometimes work one ticket together and both get credit,
+// and one salesman sometimes writes a ticket up for another — so a
+// ticket carries salesperson_ids, an array of profile UUIDs. At least
+// one salesperson is required (the form never lets the last one be
+// removed). Names are shown joined with ", " wherever they appear; an
+// empty array renders "—".
+export function salespersonIdsOf(ticket) {
+  const ids = ticket?.salesperson_ids
+  return Array.isArray(ids) ? ids.filter(Boolean) : []
+}
+
+export function salespersonNamesOf(ticket, profiles) {
+  const ids = salespersonIdsOf(ticket)
+  if (!ids.length) return '—'
+  return ids.map((id) => profiles?.find((p) => p.id === id)?.name || '—').join(', ')
+}
+
+// Sales may change the salespeople ONLY while creating a new unsaved
+// ticket, or while an invoice is still Draft. Once a quote is saved
+// (Open/Lost) or an invoice leaves Draft, the picker is locked for
+// Sales — Admin can change salespeople on any editable ticket (Void
+// stays locked via canEditTicket). This is a picker-level lock only:
+// it does NOT change canEditTicket or any other edit permission —
+// Sales can still edit other fields on Draft / Issued / Partially Paid
+// invoices exactly as today.
+export function canEditSalespeople(kind, ticket, isAdmin, isNew) {
+  if (isAdmin) return true
+  if (isNew) return true
+  if (kind === 'invoice' && ticket?.status === 'Draft') return true
+  return false
+}
+
 export function customerSnapshot(customer, contacts, addresses) {
   if (!customer) return null
   const primary = (contacts || []).find((c) => c.customer_id === customer.id && c.is_primary) ||
@@ -348,7 +381,9 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
   // Pure function — nothing is saved here. The caller opens TicketForm with
   // the result; only Save creates the record, with a NEW atomic number.
   // Carries over: customer, vehicle (same one, for the user to change),
-  // lines (in order), lump-sum labor, customer notes, payment terms, PO number.
+  // lines (in order), lump-sum labor, customer notes, payment terms, PO
+  // number, and the whole salesperson_ids array (Nov 23 — both salesmen
+  // keep credit on the copy).
   // Does NOT carry over: id, number, previous_numbers, quote_id (a duplicate
   // is not a conversion), converted_invoice_id, follow-up date, payments /
   // balance history, created_by (reset to the current user), version.
@@ -366,7 +401,11 @@ export function duplicateTicket(kind, source, sourceLines, userId, settings) {
     customer_snapshot: source.customer_snapshot || null,
     vehicle_id: source.vehicle_id || '',
     vehicle_snapshot: source.vehicle_snapshot || null,
-    salesperson_id: userId || source.salesperson_id || '',
+    // Multi-salesman (Nov 23): the duplicate carries the WHOLE
+    // salesperson_ids array from the source — both salesmen keep credit
+    // on the copy. An empty source array falls back to the current user
+    // so the copy still has at least one salesperson.
+    salesperson_ids: (source.salesperson_ids || []).length ? [...source.salesperson_ids] : (userId ? [userId] : []),
     created_by: userId || '',
     status: kind === 'quote' ? 'Open' : 'Draft',
     po_number: source.po_number || '',
@@ -428,7 +467,7 @@ export function invoiceFromProduct(product, userId, settings) {
     customer_snapshot: null,
     vehicle_id: '',
     vehicle_snapshot: null,
-    salesperson_id: userId || '',
+    salesperson_ids: userId ? [userId] : [],
     created_by: userId || '',
     status: 'Draft',
     po_number: '',

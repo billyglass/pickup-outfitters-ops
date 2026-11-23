@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -58,7 +58,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     return () => { cancelled = true }
   }, [data.invoices]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const nameOf = (id) => data.profiles?.find((p) => p.id === id)?.name || '—'
+  const namesOf = (t) => salespersonNamesOf(t, data.profiles)
   // Walk-in invoices show the buyer's name from the snapshot, with a tag.
   const customerOf = (inv) => ticketCustomerName(inv, data.customers)
   const linesOf = (id) => (data.invoiceLines || []).filter((l) => l.invoice_id === id)
@@ -67,7 +67,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     return data.invoices.filter((inv) => {
       if (fCustomer === 'walk-in' && inv.customer_id) return false
       if (fCustomer && fCustomer !== 'walk-in' && inv.customer_id !== fCustomer) return false
-      if (fSales && inv.salesperson_id !== fSales) return false
+      if (fSales && !(inv.salesperson_ids || []).includes(fSales)) return false
       if (fStatus && inv.status !== fStatus) return false
       const d = inv.issue_date || (inv.created_at || '').slice(0, 10)
       if (fFrom && d < fFrom) return false
@@ -122,7 +122,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         kind="invoice" ticket={inv} lines={linesOf(inv.id)}
         customer={data.customers.find((c) => c.id === inv.customer_id)}
         vehicle={data.vehicles.find((v) => v.id === inv.vehicle_id)}
-        salespersonName={nameOf(inv.salesperson_id)} settings={settings}
+        salespersonName={namesOf(inv)} settings={settings}
         onClose={() => { setPrinting(null); onViewClosed?.() }}
         onEdit={() => { setPrinting(null); setEditing(inv); onClearReturn?.() }}
         canEdit={canEditTicket('invoice', inv, isAdmin)}
@@ -266,7 +266,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="vehicle">{v ? `${v.year || ''} ${v.make || ''} ${v.model || ''}` : '—'}{bedSize ? ` · ${bedSize}` : ''}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></td>
                 <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
                 <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
-                <td className="nowrap">{nameOf(inv.salesperson_id)}</td>
+                <td className="nowrap">{namesOf(inv)}</td>
                 <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${Number(inv.total || 0).toFixed(2)}</td>
                 <td className="num">${Number(inv.balance_due ?? inv.total ?? 0).toFixed(2)}</td>
