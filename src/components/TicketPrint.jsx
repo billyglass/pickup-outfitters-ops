@@ -11,7 +11,11 @@ import { formatPhone } from '../lib/phones.js'
 // NOT printed — tax is already baked into the totals). Labor on the
 // print is one combined line: per-line Labor $ + lump-sum labor.
 // NOTES — SUBTOTAL / TAX (7.74%) / LABOR / TOTAL — "Thank You For Your Business"
-// Plain black-and-white, no background colours. VIN and Year/Make/Model
+// Grayscale only (black / white / grays, no color) so it prints on the
+// shop's B&W printer. The notes + totals block sits at the bottom of the
+// page even on a 1-line ticket (flex spacer), so it never looks like an
+// awkward half page; long tickets flow naturally and the totals land
+// after the last line on the final page.
 // print on the SAME line, matching the ticket's Vehicle section.
 export default function TicketPrint({ kind, ticket, lines, customer, vehicle, salespersonName, settings, onClose, onEdit, canEdit = true }) {
   const isQuote = kind === 'quote'
@@ -111,6 +115,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
           </tbody>
         </table>
 
+        <div className="print-spacer" />
         <div className="print-cols">
           <div>
             <strong>NOTES:</strong>
@@ -121,7 +126,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
               <tr><td>Subtotal</td><td>${money(totals.subtotal)}</td></tr>
               <tr><td>Tax ({(taxRate * 100).toFixed(2)}%)</td><td>${money(totals.taxTotal)}</td></tr>
               <tr><td>Labor</td><td>${money(totals.labor)}</td></tr>
-              <tr><td><strong>Total</strong></td><td><strong>${money(totals.total)}</strong></td></tr>
+              <tr className="print-total-row"><td><strong>Total</strong></td><td><strong>${money(totals.total)}</strong></td></tr>
               {!isQuote && roundCents(totals.total - Number(ticket.balance_due ?? totals.total)) > 0 && (
                 <tr><td>Paid</td><td>${money(roundCents(totals.total - Number(ticket.balance_due ?? totals.total)))}</td></tr>
               )}

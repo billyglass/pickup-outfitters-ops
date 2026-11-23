@@ -376,7 +376,7 @@ export default function App() {
       )}
 
       <div className="container">
-        <form onSubmit={runSearch} className="row" style={{ marginBottom: 16 }}>
+        <form onSubmit={runSearch} className="row global-search" style={{ marginBottom: 16 }}>
           <div className="combo" style={{ flex: '1 1 520px', maxWidth: 560 }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setSearchSuggestOpen(false) }}>
             <input
               className="searchbox"

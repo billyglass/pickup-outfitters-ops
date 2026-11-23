@@ -160,17 +160,26 @@ tr:hover td { background: #fafafa; }
 .ticket-form .line-card.line-alt { background: #f8efe4; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
-/* --- Print: template layout, plain black-and-white, no backgrounds --- */
+/* --- Print: template layout, grayscale only (black / white / grays,
+   no color) so it prints on the shop's B&W printer. The doc is a flex
+   column with a spacer above the notes/totals block, so the totals sit
+   at the bottom of the page even on a 1-line ticket. --- */
 .print-sheet { max-width: 800px; margin: 0 auto; }
 .print-actions { display: flex; gap: 10px; margin-bottom: 12px; }
-.print-doc { background: #fff; border: 1px solid #999; padding: 28px 32px; font-size: 14px; color: #000; }
+.print-doc { background: #fff; border: 1px solid #999; padding: 28px 32px; font-size: 14px; color: #000; display: flex; flex-direction: column; min-height: 900px; }
+.print-spacer { flex: 1 0 auto; }
 .print-logo { font-size: 24px; font-weight: 800; font-style: italic; letter-spacing: 0.5px; }
 .print-header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
-.print-title h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: 1px; }
+.print-title h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: 1px; }
 .print-cols { display: flex; justify-content: space-between; gap: 24px; margin: 16px 0; }
 .print-cols > div:first-child { flex: 1; }
 .print-meta, .print-lines { width: 100%; border-collapse: collapse; margin: 12px 0; }
 .print-meta th, .print-meta td, .print-lines th, .print-lines td { border: 1px solid #000; padding: 6px 8px; text-align: left; }
+.print-lines thead th { background: #e5e5e5; }
+.print-lines tbody tr:nth-child(even) td { background: #f6f6f6; }
+.print-lines td:first-child, .print-lines th:first-child { text-align: center; }
+.print-lines td:nth-child(4), .print-lines th:nth-child(4),
+.print-lines td:nth-child(5), .print-lines th:nth-child(5) { text-align: right; }
 .print-lines td:last-child, .print-lines th:last-child { text-align: right; }
 .print-vin { margin: 4px 0 12px; font-size: 14px; }
 /* Totals hug the amounts: the table sizes to its content (no 240px
@@ -180,14 +189,19 @@ tr:hover td { background: #fafafa; }
 .print-totals td { border: 1px solid #000; padding: 6px 8px; }
 .print-totals td:first-child { white-space: nowrap; text-align: right; }
 .print-totals td:last-child { text-align: right; white-space: nowrap; }
+.print-totals tr.print-total-row td { border-top: 2px solid #000; font-size: 15px; }
 .print-thanks { margin-top: 28px; font-weight: 600; }
 .print-small { font-size: 12px; color: #333; }
+@page { size: Letter; margin: 0.5in; }
 @media print {
   body { background: #fff; }
-  .topbar, .banner, .print-actions { display: none !important; }
+  .topbar, .banner, .print-actions, .global-search { display: none !important; }
   .container { max-width: none; margin: 0; padding: 0; }
   .print-sheet { max-width: none; }
-  .print-doc { border: 0; padding: 0; }
+  .print-doc { border: 0; padding: 0; min-height: 9.5in; }
+  /* Force the gray header / zebra rows to actually print (Chrome hides
+     backgrounds by default unless this is set). */
+  .print-doc, .print-lines th, .print-lines td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .card { border: 0; padding: 0; }
   /* Strip the ticket form's screen tints if the form itself is printed. */
   .profile-wrap { background: #fff !important; border: 0 !important; padding: 0 !important; }
