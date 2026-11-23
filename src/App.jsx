@@ -69,6 +69,9 @@ export default function App() {
   // the print view takes us back there instead of dumping us on the list.
   const [openMode, setOpenMode] = useState('view')
   const [returnTab, setReturnTab] = useState(null)
+  // Bumped by the dashboard "+ New invoice" button; Invoices opens a blank
+  // new-invoice form whenever this changes.
+  const [newInvoiceSignal, setNewInvoiceSignal] = useState(0)
   // Added from the Products catalog: a new Draft invoice prefilled with
   // one line from the product/service. Consumed by the Invoices tab.
   const [productInvoicePrefill, setProductInvoicePrefill] = useState(null)
@@ -419,7 +422,10 @@ export default function App() {
 
         {tab === 'dashboard' && (
           <>
-            <h1>Dashboard</h1>
+            <div className="row-between">
+              <h1 style={{ margin: 0 }}>Dashboard</h1>
+              <button className="btn" onClick={() => { setNewInvoiceSignal((n) => n + 1); setTab('invoices') }}>+ New invoice</button>
+            </div>
             <p className="muted">Quotes and invoices are live. Receivables, payables, and reports arrive in Phases 3–4.</p>
             <div className="grid">
               <div className="tile"><div className="num">{data.customers.length}</div><div className="label">Customers</div></div>
@@ -812,7 +818,7 @@ export default function App() {
           <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} openMode={openMode} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} />
         )}
         {tab === 'invoices' && (
-          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} openMode={openMode} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} />
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} openMode={openMode} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} createNewSignal={newInvoiceSignal} />
         )}
         {tab === 'products' && (
           <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />

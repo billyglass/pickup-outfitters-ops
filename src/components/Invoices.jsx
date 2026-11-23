@@ -8,7 +8,7 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
-export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn }) {
+export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn, createNewSignal }) {
   const [editing, setEditing] = useState(undefined)
   // Open a specific invoice on mount (e.g. clicked from search, the
   // dashboard, or the Vehicles tab). View-first: the print version opens
@@ -25,6 +25,12 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // Open a blank new-invoice form when the dashboard's "+ New invoice"
+  // button is tapped (App bumps createNewSignal and switches to this tab).
+  // NOTE: this effect must stay above the early returns below — see App.jsx.
+  useEffect(() => {
+    if (createNewSignal > 0) setEditing(null)
+  }, [createNewSignal]) // eslint-disable-next-line react-hooks/exhaustive-deps
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
   const [fCustomer, setFCustomer] = useState('')
