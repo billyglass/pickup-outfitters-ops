@@ -157,11 +157,16 @@ tr:hover td { background: #fafafa; }
 .photo-caption { padding: 6px 8px; font-size: 13px; }
 .photo-actions { padding: 0 8px 8px; }
 .photo-missing { height: 130px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; background: #fafafa; }
-.ticket-form .line-card { background: #fffdf9; border-color: #dcc9ae; }
-.ticket-form .line-card.line-alt { background: #f5e7d0; }
+/* Line items are sage green, not warm orange: the whole form is in the
+   warm orange family, so warm line tints ran together with it. Muted
+   sage alternates light / deeper against the white section, with
+   sage-gray borders, so the lines read as their own zone and each line
+   stands apart from the next. Screen only — print strips it. */
+.ticket-form .line-card { background: #f2f6f0; border-color: #aebfaf; }
+.ticket-form .line-card.line-alt { background: #d9e4d6; }
 /* "Line 1", "Line 2" — small label at the top of each line card so
    lines are easy to tell apart at a glance. */
-.ticket-form .line-num { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #8a6d4b; margin-bottom: 8px; }
+.ticket-form .line-num { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #54684f; margin-bottom: 8px; }
 /* Totals — the Total row reads as the bottom line of the ticket. */
 .ticket-section.totals-section table tr:last-child td { border-top: 2px solid #d8c3a0; font-size: 16px; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } }
