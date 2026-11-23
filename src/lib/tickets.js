@@ -121,6 +121,45 @@ export function dueDateFor(issueDate, terms) {
   return addDays(issueDate, termsDays(terms))
 }
 
+// --- Invoice dates (Nov 23) ------------------------------------------------
+// The store owns an invoice's issue_date/due_date on save — the form no
+// longer asks for them. COD = no dates at all. A terms invoice's due date
+// runs from the BILLING date (when the invoice is Issued), not from when
+// the draft was created: they create the invoice first, wait on equipment,
+// finish the job, then bill it out, and the 30 days run from then. A
+// customer's profile can carry longer terms (Net 60 is already a Terms
+// option on the customer profile) — picking such a customer brings their
+// terms onto the ticket and the due date follows from the billing date.
+//  - new invoice: issue = today; due = Issued ? (COD ? null : today+terms) : null (a Draft has no due date yet)
+//  - Draft -> Issued: issue = today (the billing date); due = COD ? null : today+terms
+//  - Draft saved as Draft: keep the saved issue_date; due = null
+//  - Issued (or later) edited: keep the saved issue_date and due_date,
+//    unless the terms changed — then due = COD ? null : saved issue_date + new terms
+//    (a manually-set due date from the old model is preserved when the
+//    terms didn't change)
+// Quotes are untouched — their dates are handled separately. Pure
+// function, so both backends (Supabase + local) can share it.
+export function invoiceDatesOnSave({ isNew, currentStatus, currentIssueDate, currentDueDate, currentTerms, newStatus, newTerms }) {
+  const today = todayStr()
+  const dueFor = (issue, terms) => {
+    if (!issue) return null
+    return String(terms || '').trim().toLowerCase() === 'cod' ? null : dueDateFor(issue, terms)
+  }
+  if (isNew) {
+    return { issue_date: today, due_date: newStatus === 'Issued' ? dueFor(today, newTerms) : null }
+  }
+  if (currentStatus === 'Draft' && newStatus === 'Issued') {
+    return { issue_date: today, due_date: dueFor(today, newTerms) }
+  }
+  if (newStatus === 'Draft') {
+    return { issue_date: currentIssueDate || null, due_date: null }
+  }
+  if (String(newTerms || '') !== String(currentTerms || '')) {
+    return { issue_date: currentIssueDate || null, due_date: dueFor(currentIssueDate, newTerms) }
+  }
+  return { issue_date: currentIssueDate || null, due_date: currentDueDate || null }
+}
+
 // --- Invoice payments (Phase 3, Nov 19) ----------------------------------
 // A deposit is just a payment: paid is the sum of the invoice's payments,
 // balance = total - paid (negative = overpaid / credit). Status follows

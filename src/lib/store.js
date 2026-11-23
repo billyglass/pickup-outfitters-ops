@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, roundCents, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, roundCents, invoiceDatesOnSave, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
 import { titleCaseName } from './names.js'
 import { formatPhone, phoneMatches } from './phones.js'
 
@@ -473,6 +473,15 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
     header.status = derived.status
     header.quote_id = ticket.quote_id || null
     if (ticket.idempotency_key) header.idempotency_key = ticket.idempotency_key
+    // New invoice: the store owns issue/due dates (Nov 23) — COD has no
+    // dates; a terms invoice's due date runs from the billing date (when
+    // it is Issued), not from when the draft was created. The form's
+    // dates are not trusted. See invoiceDatesOnSave in tickets.js.
+    if (!ticket.id) {
+      const dates = invoiceDatesOnSave({ isNew: true, newStatus: header.status, newTerms: header.payment_terms })
+      header.issue_date = dates.issue_date
+      header.due_date = dates.due_date
+    }
   }
   if (!ticket.id) {
     // New ticket: upsert the vehicle from the ticket, then allocate the
@@ -508,6 +517,23 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
       created_by: userId,
     })
   }
+  // Existing invoice: the store owns issue/due dates (Nov 23) — a Draft
+  // being issued gets its billing date today; an already-issued invoice
+  // keeps its saved dates unless the terms changed. See
+  // invoiceDatesOnSave in tickets.js. Quotes are untouched.
+  if (kind === 'invoice') {
+    const dates = invoiceDatesOnSave({
+      isNew: false,
+      currentStatus: current.status,
+      currentIssueDate: current.issue_date,
+      currentDueDate: current.due_date,
+      currentTerms: current.payment_terms,
+      newStatus: header.status,
+      newTerms: header.payment_terms,
+    })
+    header.issue_date = dates.issue_date
+    header.due_date = dates.due_date
+  }
   const { data, error } = await supabase
     .from(table)
     .update(await upsertAndLink(header))
@@ -528,6 +554,23 @@ async function sbSetTicketStatus(kind, ticket, status, userId, extra = {}) {
   if (curErr) throw curErr
   const patch = { status, ...extra }
   if (kind === 'invoice' && status === 'Paid') patch.balance_due = 0
+  // Issuing an invoice bills it out (Nov 23): the billing date is today
+  // and the due date runs from today — COD has no due date. Other status
+  // changes never touch the dates. An already-issued invoice keeps its
+  // saved dates (invoiceDatesOnSave handles that).
+  if (kind === 'invoice' && status === 'Issued') {
+    const dates = invoiceDatesOnSave({
+      isNew: false,
+      currentStatus: current.status,
+      currentIssueDate: current.issue_date,
+      currentDueDate: current.due_date,
+      currentTerms: current.payment_terms,
+      newStatus: 'Issued',
+      newTerms: current.payment_terms,
+    })
+    patch.issue_date = dates.issue_date
+    patch.due_date = dates.due_date
+  }
   const { data, error } = await supabase.from(table).update(patch).eq('id', ticket.id).eq('version', current.version).select().single()
   if (error) throw error
   if (!data) throw new VersionConflict('Status change conflict — reload and try again.')
@@ -583,7 +626,7 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
       created_by: userId,
       status: 'Draft',
       issue_date: issueDate,
-      due_date: dueDateFor(issueDate, quote.payment_terms),
+      due_date: null, // Draft — no due date until it is issued (Nov 23)
       po_number: quote.po_number || null,
       payment_terms: quote.payment_terms || 'COD',
       customer_notes: quote.customer_notes || null,
@@ -903,6 +946,21 @@ function localSaveTicket(kind, ticket, lines, userId) {
     const derived = deriveInvoiceBalance(totals.total, paidSoFar, saved.status)
     saved.balance_due = derived.balanceDue
     saved.status = derived.status
+    // Invoice dates (Nov 23, local mirror of sbSaveTicket): the store
+    // owns issue/due dates — COD has no dates; a terms invoice's due date
+    // runs from the billing date. The form's dates are not trusted.
+    const current = ticket.id ? rows.find((r) => r.id === ticket.id) : null
+    const dates = invoiceDatesOnSave({
+      isNew: !ticket.id,
+      currentStatus: current?.status,
+      currentIssueDate: current?.issue_date,
+      currentDueDate: current?.due_date,
+      currentTerms: current?.payment_terms,
+      newStatus: saved.status,
+      newTerms: saved.payment_terms || 'COD',
+    })
+    saved.issue_date = dates.issue_date
+    saved.due_date = dates.due_date
   }
   if (!saved.id) {
     saved.id = uid()
@@ -1707,7 +1765,23 @@ export const store = {
       const rows = lsRead(key, [])
       const idx = rows.findIndex((r) => r.id === ticket.id)
       if (idx < 0) throw new Error('Ticket not found.')
-      rows[idx] = { ...rows[idx], status, ...(extra || {}), version: (rows[idx].version || 1) + 1 }
+      const next = { ...rows[idx], status, ...(extra || {}), version: (rows[idx].version || 1) + 1 }
+      // Issuing an invoice bills it out (Nov 23): the billing date is
+      // today and the due date runs from today — COD has no due date.
+      if (kind === 'invoice' && status === 'Issued') {
+        const dates = invoiceDatesOnSave({
+          isNew: false,
+          currentStatus: rows[idx].status,
+          currentIssueDate: rows[idx].issue_date,
+          currentDueDate: rows[idx].due_date,
+          currentTerms: rows[idx].payment_terms,
+          newStatus: 'Issued',
+          newTerms: rows[idx].payment_terms,
+        })
+        next.issue_date = dates.issue_date
+        next.due_date = dates.due_date
+      }
+      rows[idx] = next
       lsWrite(key, rows)
       return rows[idx]
     }
@@ -1745,7 +1819,7 @@ export const store = {
           ? (quote.salesperson_ids || []).filter(Boolean)
           : (userId ? [userId] : []),
         created_by: userId, status: 'Draft',
-        issue_date: issueDate, due_date: dueDateFor(issueDate, quote.payment_terms),
+        issue_date: issueDate, due_date: null, // Draft — no due date until it is issued (Nov 23)
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'COD',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,
         customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: localSnapshot || null,

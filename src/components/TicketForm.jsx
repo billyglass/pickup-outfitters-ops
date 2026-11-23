@@ -6,7 +6,7 @@ import { titleCaseName } from '../lib/names.js'
 import { formatPhone } from '../lib/phones.js'
 import {
   computeTotals, money, lineTotal, laborAmount, emptyLine, normalizeLineForForm, addDays, todayStr,
-  dueDateFor, termsDays, customerSnapshot,
+  customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
   canEditTicket, salespersonNamesOf, canEditSalespeople,
@@ -57,7 +57,8 @@ export default function TicketForm({
       issue_date: issue,
       expires_on: isQuote ? addDays(issue, settings?.quote_validity_days ?? 15) : undefined,
       follow_up_on: '',
-      due_date: !isQuote ? dueDateFor(issue, initialTerms) : undefined,
+      // Invoices carry no due_date in form state — the store sets it on
+      // save (Nov 23): COD has none, terms run from the billing date.
     }
   })
   // Legacy lines are normalized for the form: a labor-kind line's charge
@@ -209,9 +210,11 @@ export default function TicketForm({
   function patch(p, { recomputeDates = false } = {}) {
     setTicket((t) => {
       const next = { ...t, ...p }
-      if (recomputeDates && next.issue_date) {
-        if (isQuote) next.expires_on = addDays(next.issue_date, settings?.quote_validity_days ?? 15)
-        else next.due_date = dueDateFor(next.issue_date, next.payment_terms || 'COD')
+      // Quotes only: changing the quote date moves Valid until with it.
+      // Invoices have no date pickers on the form anymore (Nov 23) — the
+      // store owns issue/due dates on save, so nothing is recomputed here.
+      if (recomputeDates && next.issue_date && isQuote) {
+        next.expires_on = addDays(next.issue_date, settings?.quote_validity_days ?? 15)
       }
       return next
     })
@@ -554,17 +557,19 @@ export default function TicketForm({
               <label>P.O. number</label>
               <input value={ticket.po_number || ''} disabled={readOnly} onChange={(e) => patch({ po_number: e.target.value })} />
             </div>
-            <div>
-              <label>{isQuote ? 'Date' : 'Issue date'}</label>
-              <input type="date" value={ticket.issue_date || ''} disabled={readOnly} onChange={(e) => patch({ issue_date: e.target.value }, { recomputeDates: true })} />
-            </div>
+            {isQuote && (
+              <div>
+                <label>Date</label>
+                <input type="date" value={ticket.issue_date || ''} disabled={readOnly} onChange={(e) => patch({ issue_date: e.target.value }, { recomputeDates: true })} />
+              </div>
+            )}
             <div>
               <label>Terms</label>
               <select value={ticket.payment_terms || 'COD'} disabled={readOnly} onChange={(e) => patch({ payment_terms: e.target.value }, { recomputeDates: true })}>
                 {TERMS.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
-            {isQuote ? (
+            {isQuote && (
               <>
                 <div>
                   <label>Valid until (issue + {settings?.quote_validity_days ?? 15} days)</label>
@@ -575,11 +580,6 @@ export default function TicketForm({
                   <input type="date" value={ticket.follow_up_on || ''} disabled={readOnly} onChange={(e) => patch({ follow_up_on: e.target.value })} />
                 </div>
               </>
-            ) : (
-              <div>
-                <label>Due date (issue + {termsDays(ticket.payment_terms)} days)</label>
-                <input type="date" value={ticket.due_date || ''} disabled={readOnly} onChange={(e) => patch({ due_date: e.target.value })} />
-              </div>
             )}
           </div>
         </div>

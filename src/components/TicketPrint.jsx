@@ -4,7 +4,8 @@ import { formatPhone } from '../lib/phones.js'
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
 // "Quotation For:" / "Invoice For:" Name / Company / Address / Phone / Email
-// Date + valid until (quote) / due date (invoice)
+// Date + valid until (quote) / due date (invoice — only when it has one;
+// a COD invoice has no due date, and the Terms row already says COD)
 // SALESPERSON / P.O. NUMBER / VEHICLE / TERMS
 // Lines: QUANTITY / DESCRIPTION / PART NUMBER / UNIT PRICE / AMOUNT / LABOR
 // (the Taxable column is set per line when creating the ticket and is
@@ -82,7 +83,9 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
             <div>Date: {fmtDate(ticket.issue_date || (ticket.created_at || '').slice(0, 10))}</div>
             {isQuote
               ? <div>Quotation valid until: {fmtDate(ticket.expires_on)}</div>
-              : <div>Due date: {fmtDate(ticket.due_date)}</div>}
+              : ticket.due_date
+                ? <div>Due date: {fmtDate(ticket.due_date)}</div>
+                : null}
             {ticket.follow_up_on && <div>Follow-up: {fmtDate(ticket.follow_up_on)}</div>}
           </div>
         </div>
