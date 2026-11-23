@@ -183,6 +183,23 @@ export default function TicketForm({
   // Admin can change them on any editable ticket.
   const salespersonEditable = !readOnly && canEditSalespeople(kind, initial, isAdmin, !initial)
 
+  // Salesperson picker model (Nov 23): salesperson_ids[0] is the ticket
+  // OWNER — the dropdown replaces the owner outright (extras are kept);
+  // salesperson_ids[1..] are extra hands, added with "Add salesman" and
+  // removable as chips. The owner is never removable, only replaceable.
+  // Options are active profiles; the current owner is kept in the list
+  // even if inactive so the dropdown never goes blank.
+  const spIds = ticket.salesperson_ids || []
+  const spOwnerId = spIds[0] || ''
+  const spExtras = spIds.slice(1)
+  const spActiveProfiles = (profiles || []).filter((p) => p.active !== false)
+  const spOwnerOptions = spActiveProfiles.some((p) => p.id === spOwnerId)
+    ? spActiveProfiles
+    : spOwnerId
+      ? [...spActiveProfiles, (profiles || []).find((p) => p.id === spOwnerId)].filter(Boolean)
+      : spActiveProfiles
+  const spAddable = spActiveProfiles.filter((p) => !spIds.includes(p.id))
+
   function patch(p, { recomputeDates = false } = {}) {
     setTicket((t) => {
       const next = { ...t, ...p }
@@ -471,28 +488,38 @@ export default function TicketForm({
         <div>
           <div className="meta-grid">
             <div>
-              <label>Salesperson{(ticket.salesperson_ids || []).length > 1 ? 's' : ''}</label>
-              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                {(ticket.salesperson_ids || []).map((id) => {
-                  const p = profiles.find((x) => x.id === id)
-                  return (
-                    <span key={id} className="pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {p?.name || '—'}
-                      {salespersonEditable && (ticket.salesperson_ids || []).length > 1 && (
-                        <button type="button" aria-label={`Remove ${p?.name || 'salesperson'}`} onClick={() => patch({ salesperson_ids: (ticket.salesperson_ids || []).filter((x) => x !== id) })} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
-                      )}
-                    </span>
-                  )
-                })}
-                {!(ticket.salesperson_ids || []).length && <span className="muted small">No salesperson yet — add one below.</span>}
-              </div>
+              <label>Salesperson</label>
+              <select
+                value={spOwnerId}
+                disabled={!salespersonEditable}
+                aria-label="Salesperson (ticket owner)"
+                onChange={(e) => { const v = e.target.value; if (v) patch({ salesperson_ids: [v, ...spExtras] }) }}
+              >
+                {!spOwnerId && <option value="">— Pick a salesperson —</option>}
+                {spOwnerOptions.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+              </select>
+              {spExtras.length > 0 && (
+                <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {spExtras.map((id) => {
+                    const p = profiles.find((x) => x.id === id)
+                    return (
+                      <span key={id} className="pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {p?.name || '—'}
+                        {salespersonEditable && (
+                          <button type="button" aria-label={`Remove ${p?.name || 'salesperson'}`} onClick={() => patch({ salesperson_ids: [spOwnerId, ...spExtras.filter((x) => x !== id)].filter(Boolean) })} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                        )}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
               {salespersonEditable && (
-                <select value="" onChange={(e) => { const v = e.target.value; if (v) patch({ salesperson_ids: [...(ticket.salesperson_ids || []), v] }) }} aria-label="Add salesperson">
-                  <option value="">+ Add salesperson…</option>
-                  {profiles.filter((p) => !(ticket.salesperson_ids || []).includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+                <select value="" onChange={(e) => { const v = e.target.value; if (v) patch({ salesperson_ids: [...spIds, v] }) }} aria-label="Add salesman" style={{ marginTop: 6 }}>
+                  <option value="">+ Add salesman</option>
+                  {spAddable.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
                 </select>
               )}
-              <p className="muted small">Auto-assigned to the logged-in user when created. {salespersonEditable ? 'Add or remove salespeople here — at least one stays on the ticket.' : 'Only an Admin can change the salespeople once this ticket is issued.'}</p>
+              <p className="muted small">The owner is whoever writes up the ticket — it starts as the logged-in user; pick a different name above to hand the ticket to someone else. “Add salesman” below adds extra hands. The owner always stays on the ticket.{salespersonEditable ? '' : ' Only an Admin can change the salespeople once this ticket is issued.'}</p>
             </div>
             <div>
               <label>P.O. number</label>

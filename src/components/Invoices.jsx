@@ -238,7 +238,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         />
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
-          {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {(data.profiles || []).filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
           <option value="">All statuses</option>

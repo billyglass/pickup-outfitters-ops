@@ -873,12 +873,14 @@ alter table public.customer_notes enable row level security;
 alter table public.product_notes enable row level security;
 alter table public.product_photos enable row level security;
 
--- profiles: read own row, or any row if Admin. Insert own row (first setup)
--- or Admin. Update own name/email, or Admin for everything (guard trigger
--- enforces role/active changes are Admin-only).
+-- profiles: every ACTIVE user can read all profiles (Sales need the full
+-- list for the salesperson picker on tickets and the salesperson filters
+-- on the Quotes/Invoices lists — Nov 23, migration 019). Insert own row
+-- (first setup) or Admin. Update own name/email, or Admin for everything
+-- (guard trigger enforces role/active changes are Admin-only).
 drop policy if exists "profiles read" on public.profiles;
 create policy "profiles read" on public.profiles for select
-  using (auth.uid() = id or public.is_admin());
+  using (public.is_active_user());
 drop policy if exists "profiles insert" on public.profiles;
 create policy "profiles insert" on public.profiles for insert
   with check (auth.uid() = id or public.is_admin());

@@ -244,7 +244,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         />
         <select value={fSales} onChange={(e) => setFSales(e.target.value)}>
           <option value="">All salespeople</option>
-          {(data.profiles || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {(data.profiles || []).filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={fAge} onChange={(e) => setFAge(e.target.value)}>
           <option value="">Any age</option>

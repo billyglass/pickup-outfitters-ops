@@ -58,7 +58,7 @@ async function sbLoad() {
       // cannot read product_costs (still Admin-only RLS), so costs just
       // show blank instead of breaking the whole load.
       supabase.from('products').select('*').order('name', { ascending: true }),
-      supabase.from('profiles').select('id, name, email, role'),
+      supabase.from('profiles').select('id, name, email, role, active'),
       supabase.rpc('public_settings'),
     ])
   for (const r of [customers, contacts, addresses, vehicles, quotes, invoices, quoteLines, invoiceLines, products, profiles]) {
