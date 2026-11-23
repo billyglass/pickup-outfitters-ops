@@ -636,7 +636,7 @@ export default function TicketForm({
       {prefill && !prefill.fromProduct && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
       </section>
 
-      <section className="ticket-section">
+      <section className="ticket-section line-items-section">
       <h3>Line items</h3>
       {lines.map((line, i) => (
         <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 14 }}>

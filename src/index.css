@@ -157,6 +157,9 @@ tr:hover td { background: #fafafa; }
 .photo-caption { padding: 6px 8px; font-size: 13px; }
 .photo-actions { padding: 0 8px 8px; }
 .photo-missing { height: 130px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; background: #fafafa; }
+/* The Line items heading band is sage, not orange, so it reads as part
+   of the green line-items zone instead of the warm form. */
+.ticket-section.line-items-section > h3 { background: #d9e4d6; border-bottom-color: #aebfaf; color: #54684f; }
 /* Line items are sage green, not warm orange: the whole form is in the
    warm orange family, so warm line tints ran together with it. Muted
    sage alternates light / deeper against the white section, with
