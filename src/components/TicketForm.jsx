@@ -639,7 +639,8 @@ export default function TicketForm({
       <section className="ticket-section">
       <h3>Line items</h3>
       {lines.map((line, i) => (
-        <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 10 }}>
+        <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 14 }}>
+          <div className="line-num">Line {i + 1}</div>
           <div className="form-grid">
             <div>
               <label>Description *</label>
@@ -672,10 +673,10 @@ export default function TicketForm({
           </div>
         </div>
       ))}
-      {!readOnly && <button type="button" className="btn secondary" onClick={() => { setLines([...lines, emptyLine(!customer?.tax_exempt)]); setStatus('unsaved') }}>+ Add line</button>}
+      {!readOnly && <button type="button" className="btn secondary" style={{ marginTop: 6 }} onClick={() => { setLines([...lines, emptyLine(!customer?.tax_exempt)]); setStatus('unsaved') }}>+ Add line</button>}
       </section>
 
-      <section className="ticket-section">
+      <section className="ticket-section totals-section">
       <h3>Totals</h3>
       <table>
         <tbody>
@@ -718,6 +719,8 @@ export default function TicketForm({
         />
       )}
 
+      <section className="ticket-section">
+      <h3>Notes</h3>
       <div className="form-grid">
         <div>
           <label>Customer notes (printed on the ticket)</label>
@@ -728,6 +731,7 @@ export default function TicketForm({
           <textarea rows={3} value={ticket.internal_notes || ''} disabled={readOnly} onChange={(e) => patch({ internal_notes: e.target.value })} />
         </div>
       </div>
+      </section>
 
       <div className="row" style={{ marginTop: 20 }}>
         {!readOnly && !isQuote && !initial && (

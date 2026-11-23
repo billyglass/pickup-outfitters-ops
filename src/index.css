@@ -117,11 +117,12 @@ tr:hover td { background: #fafafa; }
 .ticket-form { background: #fdf8f3; border-color: #e8ddd2; }
 .ticket-form input, .ticket-form select, .ticket-form textarea { background: #fff; }
 /* Each section is its own white card on the warm form background, so
-   Customer / Vehicle / Line items / Totals read as separate blocks
-   instead of running together. The heading is a tinted band at the top
-   of its card. */
-.ticket-section { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 16px; margin-bottom: 18px; }
-.ticket-section > h3 { background: #f6ead9; margin: 0 -16px 12px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
+   Customer / Vehicle / Line items / Totals / Payments / Notes read as
+   separate blocks instead of running together. The heading is a deeper
+   tinted band with a small-caps-style label, the card has a stronger
+   border and a soft shadow, and there is more air between sections. */
+.ticket-section { background: #fff; border: 1px solid #dccbb6; border-radius: 10px; padding: 0 16px 20px; margin-bottom: 28px; box-shadow: 0 1px 4px rgba(90, 60, 20, 0.08); }
+.ticket-section > h3 { background: #f2ddb8; margin: 0 -16px 14px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #e2cda4; font-size: 15px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #5a4632; }
 /* Customer profile — same soft treatment as the ticket form: the whole
    profile sits on the warm background, each block its own white card
    with a tinted heading band. The flag banner stays at the very top,
@@ -142,7 +143,7 @@ tr:hover td { background: #fafafa; }
    Tickets / Customers / Vehicles read as separate blocks instead of
    running together. Each row has a title line and a muted detail line. */
 .result-group { background: #fff; border: 1px solid #e8ddd2; border-radius: 10px; padding: 0 16px 8px; margin-bottom: 18px; }
-.result-group > h3 { background: #f6ead9; margin: 0 -16px 4px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #eedfc9; }
+.result-group > h3 { background: #f2ddb8; margin: 0 -16px 4px; padding: 10px 16px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #e2cda4; font-size: 15px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #5a4632; }
 .result-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 0; }
 .result-row + .result-row { border-top: 1px solid #f0e8de; }
 .result-title { font-size: 15px; }
@@ -156,8 +157,13 @@ tr:hover td { background: #fafafa; }
 .photo-caption { padding: 6px 8px; font-size: 13px; }
 .photo-actions { padding: 0 8px 8px; }
 .photo-missing { height: 130px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; background: #fafafa; }
-.ticket-form .line-card { background: #fffdf9; border-color: #e9dccf; }
-.ticket-form .line-card.line-alt { background: #f8efe4; }
+.ticket-form .line-card { background: #fffdf9; border-color: #dcc9ae; }
+.ticket-form .line-card.line-alt { background: #f5e7d0; }
+/* "Line 1", "Line 2" — small label at the top of each line card so
+   lines are easy to tell apart at a glance. */
+.ticket-form .line-num { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #8a6d4b; margin-bottom: 8px; }
+/* Totals — the Total row reads as the bottom line of the ticket. */
+.ticket-section.totals-section table tr:last-child td { border-top: 2px solid #d8c3a0; font-size: 16px; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, grayscale only (black / white / grays,
@@ -212,8 +218,8 @@ tr:hover td { background: #fafafa; }
   .profile-wrap { background: #fff !important; border: 0 !important; padding: 0 !important; }
   .profile-duo { display: block !important; }
   .ticket-form { background: #fff !important; }
-  .ticket-form h3 { background: none !important; border: 0 !important; margin: 16px 0 6px !important; padding: 0 !important; }
-  .ticket-section { background: #fff !important; border: 0 !important; padding: 0 !important; margin: 0 0 12px !important; }
+  .ticket-form h3 { background: none !important; border: 0 !important; margin: 16px 0 6px !important; padding: 0 !important; text-transform: none !important; letter-spacing: normal !important; }
+  .ticket-section { background: #fff !important; border: 0 !important; padding: 0 !important; margin: 0 0 12px !important; box-shadow: none !important; }
   .ticket-section > h3 { background: none !important; border: 0 !important; margin: 0 0 6px !important; padding: 0 !important; }
   .ticket-form .line-card { background: #fff !important; }
 }
