@@ -167,6 +167,14 @@ tr:hover td { background: #fafafa; }
    stands apart from the next. Screen only — print strips it. */
 .ticket-form .line-card { background: #f2f6f0; border-color: #aebfaf; }
 .ticket-form .line-card.line-alt { background: #d9e4d6; }
+/* Line-item fields sit on ONE row with columns sized to the content:
+   Qty narrow, Description takes the rest, Part No. / Unit price /
+   Labor $ just wide enough for their numbers, Taxable a checkbox.
+   The old 2-column form-grid gave every field half the card, so Qty
+   and Unit price were as wide as Description and each line took three
+   rows. Numbers right-align, like the money columns on print. */
+.ticket-form .line-fields { display: grid; grid-template-columns: 56px 1fr 140px 104px 104px 76px; gap: 0 10px; align-items: end; }
+.ticket-form .line-fields input[type="number"] { text-align: right; }
 /* "Line 1", "Line 2" — small label at the top of each line card so
    lines are easy to tell apart at a glance. */
 .ticket-form .line-num { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #54684f; margin-bottom: 8px; }
@@ -184,7 +192,7 @@ tr:hover td { background: #fafafa; }
    over together, so there is no wide empty card with a small table
    inside it. */
 .ticket-section.totals-section { width: max-content; max-width: 100%; margin-left: auto; }
-@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } }
+@media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } .ticket-form .line-fields { grid-template-columns: 1fr 1fr; } .ticket-form .line-fields .line-desc { grid-column: 1 / -1; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, grayscale only (black / white / grays,
    no color) so it prints on the shop's B&W printer. The doc is a flex

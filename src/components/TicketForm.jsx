@@ -641,8 +641,12 @@ export default function TicketForm({
       {lines.map((line, i) => (
         <div key={line.id || `new-${i}`} className={`card line-card${i % 2 ? ' line-alt' : ''}`} style={{ padding: 12, marginBottom: 14 }}>
           <div className="line-num">Line {i + 1}</div>
-          <div className="form-grid">
+          <div className="line-fields">
             <div>
+              <label>Qty</label>
+              <input type="number" min="0" step="0.01" value={line.quantity ?? ''} disabled={readOnly} onChange={(e) => updateLine(i, { quantity: e.target.value === '' ? '' : Number(e.target.value) || 0 })} onBlur={() => { if (line.quantity === '' || line.quantity == null) updateLine(i, { quantity: 1 }) }} />
+            </div>
+            <div className="line-desc">
               <label>Description *</label>
               <input value={line.description || ''} disabled={readOnly} onChange={(e) => updateLine(i, { description: e.target.value })} />
             </div>
@@ -651,20 +655,16 @@ export default function TicketForm({
               <input value={line.part_number || ''} disabled={readOnly} onChange={(e) => updateLine(i, { part_number: e.target.value })} />
             </div>
             <div>
-              <label>Qty</label>
-              <input type="number" min="0" step="0.01" value={line.quantity ?? ''} disabled={readOnly} onChange={(e) => updateLine(i, { quantity: e.target.value === '' ? '' : Number(e.target.value) || 0 })} onBlur={() => { if (line.quantity === '' || line.quantity == null) updateLine(i, { quantity: 1 }) }} />
-            </div>
-            <div>
               <label>Unit price</label>
               <input type="number" min="0" step="0.01" value={line.unit_price ?? ''} disabled={readOnly} placeholder="0.00" onChange={(e) => updateLine(i, { unit_price: e.target.value === '' ? '' : Number(e.target.value) || 0 })} onBlur={() => { if (line.unit_price === '' || line.unit_price == null) updateLine(i, { unit_price: 0 }) }} />
             </div>
             <div>
-              <label>Labor $ (optional — per line)</label>
+              <label>Labor $</label>
               <input type="number" min="0" step="0.01" value={line.labor_amount || ''} disabled={readOnly} placeholder="0.00" onChange={(e) => updateLine(i, { labor_amount: Number(e.target.value) || 0 })} />
             </div>
             <div>
               <label>Taxable</label>
-              <input type="checkbox" style={{ width: 'auto' }} checked={!!line.taxable} disabled={readOnly} onChange={(e) => updateLine(i, { taxable: e.target.checked })} /> Taxable (7.74% on parts only)
+              <input type="checkbox" style={{ width: 'auto' }} checked={!!line.taxable} disabled={readOnly} onChange={(e) => updateLine(i, { taxable: e.target.checked })} />
             </div>
           </div>
           <div className="row-between">
