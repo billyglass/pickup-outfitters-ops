@@ -173,7 +173,7 @@ tr:hover td { background: #fafafa; }
    The old 2-column form-grid gave every field half the card, so Qty
    and Unit price were as wide as Description and each line took three
    rows. Numbers right-align, like the money columns on print. */
-.ticket-form .line-fields { display: grid; grid-template-columns: 56px 1fr 140px 104px 104px 76px; gap: 0 10px; align-items: end; }
+.ticket-form .line-fields { display: grid; grid-template-columns: 76px 1fr 140px 104px 104px 76px; gap: 0 10px; align-items: end; }
 .ticket-form .line-fields input[type="number"] { text-align: right; }
 /* "Line 1", "Line 2" — small label at the top of each line card so
    lines are easy to tell apart at a glance. */
