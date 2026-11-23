@@ -198,7 +198,12 @@ tr:hover td { background: #fafafa; }
   .topbar, .banner, .print-actions, .global-search { display: none !important; }
   .container { max-width: none; margin: 0; padding: 0; }
   .print-sheet { max-width: none; }
-  .print-doc { border: 0; padding: 0; min-height: 9.5in; }
+  .print-doc { border: 0; padding: 0; height: 9.4in; }
+  /* Definite height (not min-height) in print: Chrome's print layout does
+     not reliably grow a flex spacer into min-height space, which is why
+     the totals only moved halfway. With a definite height the spacer
+     fills the free space and the totals sit at the page bottom; a ticket
+     taller than the page overflows onto the next page as usual. */
   /* Force the gray header / zebra rows to actually print (Chrome hides
      backgrounds by default unless this is set). */
   .print-doc, .print-lines th, .print-lines td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
