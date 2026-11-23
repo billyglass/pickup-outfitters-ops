@@ -176,6 +176,11 @@ tr:hover td { background: #fafafa; }
 .ticket-section.totals-section table td:first-child { text-align: right; white-space: nowrap; }
 .ticket-section.totals-section table td:last-child { text-align: right; white-space: nowrap; }
 .ticket-section.totals-section table tr:last-child td { border-top: 2px solid #d8c3a0; font-size: 16px; }
+/* The Totals section itself is a compact card hugging the right edge,
+   like the totals block on the printed ticket — heading and all move
+   over together, so there is no wide empty card with a small table
+   inside it. */
+.ticket-section.totals-section { width: max-content; max-width: 100%; margin-left: auto; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
 /* --- Print: template layout, grayscale only (black / white / grays,
