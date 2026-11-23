@@ -819,7 +819,7 @@ export default function App() {
           <Quotes data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openQuoteId={openQuoteId} openMode={openMode} onOpened={() => setOpenQuoteId(null)} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} />
         )}
         {tab === 'invoices' && (
-          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} openMode={openMode} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} createNewSignal={newInvoiceSignal} />
+          <Invoices data={data} user={user} profile={profile} isAdmin={isAdmin} settings={data.settings} onReload={loadData} onError={setError} openInvoiceId={openInvoiceId} openMode={openMode} onOpened={() => setOpenInvoiceId(null)} productPrefill={productInvoicePrefill} onProductPrefillConsumed={() => setProductInvoicePrefill(null)} onViewClosed={handleViewClosed} onClearReturn={clearReturnTab} createNewSignal={newInvoiceSignal} onCreateNewConsumed={() => setNewInvoiceSignal(0)} />
         )}
         {tab === 'products' && (
           <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />

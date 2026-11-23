@@ -8,7 +8,7 @@ import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
 
-export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn, createNewSignal }) {
+export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn, createNewSignal, onCreateNewConsumed }) {
   const [editing, setEditing] = useState(undefined)
   // Open a specific invoice on mount (e.g. clicked from search, the
   // dashboard, or the Vehicles tab). View-first: the print version opens
@@ -27,9 +27,16 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   }, [])
   // Open a blank new-invoice form when the dashboard's "+ New invoice"
   // button is tapped (App bumps createNewSignal and switches to this tab).
+  // The signal MUST be consumed here (App resets it to 0): this component
+  // unmounts whenever Bill leaves the tab, so an unconsumed signal would
+  // re-open a blank invoice on every later visit to the tab instead of
+  // showing the list.
   // NOTE: this effect must stay above the early returns below — see App.jsx.
   useEffect(() => {
-    if (createNewSignal > 0) setEditing(null)
+    if (createNewSignal > 0) {
+      setEditing(null)
+      onCreateNewConsumed?.()
+    }
   }, [createNewSignal]) // eslint-disable-next-line react-hooks/exhaustive-deps
   const [duplicating, setDuplicating] = useState(null) // { ticket, lines, sourceLabel } or null
   const [printing, setPrinting] = useState(null)
