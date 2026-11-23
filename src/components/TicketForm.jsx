@@ -456,6 +456,52 @@ export default function TicketForm({
             </>
           )}
         </div>
+        <div>
+          <div className="meta-grid">
+            <div>
+              <label>Salesperson</label>
+              {isAdmin ? (
+                <select value={ticket.salesperson_id || ''} disabled={readOnly} onChange={(e) => patch({ salesperson_id: e.target.value })}>
+                  {profiles.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+                </select>
+              ) : (
+                <input value={profiles.find((p) => p.id === ticket.salesperson_id)?.name || profile?.name || ''} disabled />
+              )}
+              <p className="muted small">Auto-assigned to the logged-in user when created. Admin can reassign.</p>
+            </div>
+            <div>
+              <label>P.O. number</label>
+              <input value={ticket.po_number || ''} disabled={readOnly} onChange={(e) => patch({ po_number: e.target.value })} />
+            </div>
+            <div>
+              <label>{isQuote ? 'Date' : 'Issue date'}</label>
+              <input type="date" value={ticket.issue_date || ''} disabled={readOnly} onChange={(e) => patch({ issue_date: e.target.value }, { recomputeDates: true })} />
+            </div>
+            <div>
+              <label>Terms</label>
+              <select value={ticket.payment_terms || 'Net 30'} disabled={readOnly} onChange={(e) => patch({ payment_terms: e.target.value }, { recomputeDates: true })}>
+                {TERMS.map((t) => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            {isQuote ? (
+              <>
+                <div>
+                  <label>Valid until (issue + {settings?.quote_validity_days ?? 15} days)</label>
+                  <input type="date" value={ticket.expires_on || ''} disabled={readOnly} onChange={(e) => patch({ expires_on: e.target.value })} />
+                </div>
+                <div>
+                  <label>Follow-up date (optional)</label>
+                  <input type="date" value={ticket.follow_up_on || ''} disabled={readOnly} onChange={(e) => patch({ follow_up_on: e.target.value })} />
+                </div>
+              </>
+            ) : (
+              <div>
+                <label>Due date (issue + {termsDays(ticket.payment_terms)} days)</label>
+                <input type="date" value={ticket.due_date || ''} disabled={readOnly} onChange={(e) => patch({ due_date: e.target.value })} />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       </section>
 
@@ -510,51 +556,6 @@ export default function TicketForm({
       {!vinNorm && <p className="muted small">VIN can be left blank if it's not known yet — no vehicle record is created until a VIN is entered. When you save with a VIN, the vehicle shows up in the Vehicles tab automatically.</p>}
       {prefill && !prefill.fromProduct && <p className="muted small">Change the VIN above for this fleet unit — Year/Make/Model fill in if that VIN is already on file.</p>}
       </section>
-
-      <div className="form-grid">
-        <div>
-          <label>Salesperson</label>
-          {isAdmin ? (
-            <select value={ticket.salesperson_id || ''} disabled={readOnly} onChange={(e) => patch({ salesperson_id: e.target.value })}>
-              {profiles.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
-            </select>
-          ) : (
-            <input value={profiles.find((p) => p.id === ticket.salesperson_id)?.name || profile?.name || ''} disabled />
-          )}
-          <p className="muted small">Auto-assigned to the logged-in user when created. Admin can reassign.</p>
-        </div>
-        <div>
-          <label>P.O. number</label>
-          <input value={ticket.po_number || ''} disabled={readOnly} onChange={(e) => patch({ po_number: e.target.value })} />
-        </div>
-        <div>
-          <label>{isQuote ? 'Date' : 'Issue date'}</label>
-          <input type="date" value={ticket.issue_date || ''} disabled={readOnly} onChange={(e) => patch({ issue_date: e.target.value }, { recomputeDates: true })} />
-        </div>
-        <div>
-          <label>Terms</label>
-          <select value={ticket.payment_terms || 'Net 30'} disabled={readOnly} onChange={(e) => patch({ payment_terms: e.target.value }, { recomputeDates: true })}>
-            {TERMS.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        {isQuote ? (
-          <>
-            <div>
-              <label>Valid until (issue + {settings?.quote_validity_days ?? 15} days)</label>
-              <input type="date" value={ticket.expires_on || ''} disabled={readOnly} onChange={(e) => patch({ expires_on: e.target.value })} />
-            </div>
-            <div>
-              <label>Follow-up date (optional)</label>
-              <input type="date" value={ticket.follow_up_on || ''} disabled={readOnly} onChange={(e) => patch({ follow_up_on: e.target.value })} />
-            </div>
-          </>
-        ) : (
-          <div>
-            <label>Due date (issue + {termsDays(ticket.payment_terms)} days)</label>
-            <input type="date" value={ticket.due_date || ''} disabled={readOnly} onChange={(e) => patch({ due_date: e.target.value })} />
-          </div>
-        )}
-      </div>
 
       <section className="ticket-section">
       <h3>Line items</h3>
