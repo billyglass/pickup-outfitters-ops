@@ -3,6 +3,7 @@ import { store, VersionConflict } from '../lib/store.js'
 import InvoicePayments from './InvoicePayments.jsx'
 import { normalizeVin } from '../lib/csv.js'
 import { titleCaseName } from '../lib/names.js'
+import { formatPhone } from '../lib/phones.js'
 import {
   computeTotals, money, lineTotal, laborAmount, emptyLine, normalizeLineForForm, addDays, todayStr,
   dueDateFor, termsDays, customerSnapshot,
@@ -77,6 +78,11 @@ export default function TicketForm({
     return vehicleFieldsFromSnapshot(src?.vehicle_snapshot || null, linked)
   })
   const [status, setStatus] = useState('saved')
+  // Which save button was used (Create invoice / Save as draft / Save &
+  // issue). The buttons are type="submit", so each click sets this before
+  // the form's onSubmit fires; Enter submits via the first (primary)
+  // button, whose onClick sets it too. Read + cleared at the top of save().
+  const submitStatusRef = useRef(null)
   const [error, setError] = useState('')
   const [conflict, setConflict] = useState('')
   // Customer picker: type to search — matches drop below, click to pick.
@@ -271,6 +277,12 @@ export default function TicketForm({
 
   async function save(e) {
     e?.preventDefault()
+    // Which button was used: 'Issued' (Create invoice / Save & issue) or
+    // 'Draft' (Save as draft / Save draft). Null when the form was submitted
+    // without a button click — then the primary action is the default for a
+    // new invoice, and an existing ticket just keeps its status.
+    const requestedStatus = submitStatusRef.current
+    submitStatusRef.current = null
     if (walkIn) {
       if (!walkInFields.name.trim()) { setError('Walk-in needs a name.'); return }
       if (!walkInFields.phone.trim()) { setError('Walk-in needs a phone number.'); return }
@@ -280,6 +292,23 @@ export default function TicketForm({
     setConflict('')
     setStatus('saving')
     try {
+      // Blank numbers normalize here: an empty quantity means 1, an empty
+      // price or labor amount means 0. (cleanLinePayload does the same as
+      // a safety net, but the saved record should already be clean.)
+      const saveLines = lines.map((l) => ({
+        ...l,
+        quantity: l.quantity === '' || l.quantity == null ? 1 : Number(l.quantity) || 0,
+        unit_price: Number(l.unit_price) || 0,
+        labor_amount: Number(l.labor_amount) || 0,
+      }))
+      // Invoices only: a new invoice can be created straight to Issued, or
+      // saved as a Draft; a Draft being edited can be issued on save or stay
+      // a Draft. Quotes keep their status (Open on save). The store derives
+      // Issued -> Partially Paid / Paid from payments, and leaves Draft
+      // untouched, so an explicit 'Issued' here lands as Issued.
+      const targetStatus = !isQuote
+        ? (requestedStatus || (!initial ? 'Issued' : ticket.status))
+        : ticket.status
       // Snapshots freeze once a ticket leaves its open state — for quotes
       // that is any status other than Open (Lost, or already converted to
       // an invoice and won); for invoices, any status other than Draft.
@@ -304,8 +333,8 @@ export default function TicketForm({
       const snapVehicle = vehicleSnapshotFromFields(veh, ticket.vehicle_id || vinMatch?.id || null)
       const saved = await store.saveTicket(
         kind,
-        { ...ticket, customer_id: walkIn ? null : ticket.customer_id, tax_rate: taxRate, customer_snapshot: snapCustomer, vehicle_snapshot: snapVehicle },
-        lines,
+        { ...ticket, status: targetStatus, customer_id: walkIn ? null : ticket.customer_id, tax_rate: taxRate, customer_snapshot: snapCustomer, vehicle_snapshot: snapVehicle },
+        saveLines,
         user?.id
       )
       // Walk-in + "save as customer": the ticket is saved first (as a
@@ -402,7 +431,7 @@ export default function TicketForm({
               <label>Name *</label>
               <input value={walkInFields.name} disabled={readOnly} autoComplete="off" placeholder="Buyer's name" onChange={(e) => { setWalkInFields((f) => ({ ...f, name: e.target.value })); setStatus('unsaved') }} onBlur={(e) => { const v = titleCaseName(e.target.value); if (v !== e.target.value) { setWalkInFields((f) => ({ ...f, name: v })); setStatus('unsaved') } }} />
               <label>Phone *</label>
-              <input value={walkInFields.phone} disabled={readOnly} autoComplete="off" placeholder="Phone number" onChange={(e) => { setWalkInFields((f) => ({ ...f, phone: e.target.value })); setStatus('unsaved') }} />
+              <input value={walkInFields.phone} disabled={readOnly} autoComplete="off" placeholder="Phone number" onChange={(e) => { setWalkInFields((f) => ({ ...f, phone: e.target.value })); setStatus('unsaved') }} onBlur={(e) => { const v = formatPhone(e.target.value); if (v !== e.target.value) { setWalkInFields((f) => ({ ...f, phone: v })); setStatus('unsaved') } }} />
               <label>Email (optional)</label>
               <input value={walkInFields.email} disabled={readOnly} autoComplete="off" placeholder="Email (optional)" onChange={(e) => { setWalkInFields((f) => ({ ...f, email: e.target.value })); setStatus('unsaved') }} />
               <label style={{ marginTop: 12 }}>
@@ -622,11 +651,11 @@ export default function TicketForm({
             </div>
             <div>
               <label>Qty</label>
-              <input type="number" min="0" step="0.01" value={line.quantity ?? 1} disabled={readOnly} onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })} />
+              <input type="number" min="0" step="0.01" value={line.quantity ?? ''} disabled={readOnly} onChange={(e) => updateLine(i, { quantity: e.target.value === '' ? '' : Number(e.target.value) || 0 })} onBlur={() => { if (line.quantity === '' || line.quantity == null) updateLine(i, { quantity: 1 }) }} />
             </div>
             <div>
               <label>Unit price</label>
-              <input type="number" min="0" step="0.01" value={line.unit_price ?? 0} disabled={readOnly} onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) })} />
+              <input type="number" min="0" step="0.01" value={line.unit_price ?? ''} disabled={readOnly} placeholder="0.00" onChange={(e) => updateLine(i, { unit_price: e.target.value === '' ? '' : Number(e.target.value) || 0 })} onBlur={() => { if (line.unit_price === '' || line.unit_price == null) updateLine(i, { unit_price: 0 }) }} />
             </div>
             <div>
               <label>Labor $ (optional — per line)</label>
@@ -701,7 +730,19 @@ export default function TicketForm({
       </div>
 
       <div className="row" style={{ marginTop: 20 }}>
-        {!readOnly && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
+        {!readOnly && !isQuote && !initial && (
+          <>
+            <button className="btn" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Issued' }}>{status === 'saving' ? 'Saving…' : 'Create invoice'}</button>
+            <button className="btn secondary" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Draft' }}>{status === 'saving' ? 'Saving…' : 'Save as draft'}</button>
+          </>
+        )}
+        {!readOnly && !isQuote && initial && initial.status === 'Draft' && (
+          <>
+            <button className="btn" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Issued' }}>{status === 'saving' ? 'Saving…' : 'Save & issue'}</button>
+            <button className="btn secondary" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Draft' }}>{status === 'saving' ? 'Saving…' : 'Save draft'}</button>
+          </>
+        )}
+        {!readOnly && (isQuote || (initial && initial.status !== 'Draft')) && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
         {initial && onView && (
           <button
             className="btn secondary" type="button"

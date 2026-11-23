@@ -1,4 +1,5 @@
 import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents } from '../lib/tickets.js'
+import { formatPhone } from '../lib/phones.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
 // 2848 N. Lindbergh Blvd, St. Ann, MO 63074 — Phone 314-428-3730
@@ -38,7 +39,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   const isWalkIn = !ticket.customer_id && !!snapCustomer.walk_in
   const company = snapCustomer.company || customer?.company || ''
   const address = snapCustomer.address || ''
-  const phone = snapCustomer.phone || ''
+  const phone = formatPhone(snapCustomer.phone || '')
   const email = snapCustomer.email || ''
 
   return (

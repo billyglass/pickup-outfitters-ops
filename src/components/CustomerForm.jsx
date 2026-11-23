@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { store, VersionConflict } from '../lib/store.js'
 import { titleCaseName } from '../lib/names.js'
+import { formatPhone } from '../lib/phones.js'
 
 const emptyContact = () => ({ name: '', phone: '', email: '', title: '', is_primary: false })
 const emptyAddress = () => ({ address_type: 'billing', line1: '', line2: '', city: '', state: '', zip: '', is_primary: false })
@@ -147,7 +148,7 @@ export default function CustomerForm({ initial, contacts: initialContacts, addre
           </div>
           <div>
             <label>Phone</label>
-            <input value={c.phone || ''} onChange={(e) => updateContact(i, { phone: e.target.value })} />
+            <input value={c.phone || ''} onChange={(e) => updateContact(i, { phone: e.target.value })} onBlur={(e) => { const v = formatPhone(e.target.value); if (v !== (c.phone || '')) updateContact(i, { phone: v }) }} />
           </div>
           <div>
             <label>Email</label>

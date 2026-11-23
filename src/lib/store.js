@@ -2,6 +2,7 @@ import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
 import { computeTotals, cleanLinePayload, lineTotal, roundCents, dueDateFor, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
 import { titleCaseName } from './names.js'
+import { formatPhone, phoneMatches } from './phones.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -164,6 +165,10 @@ async function sbReplaceChildren(table, fk, customerId, rows) {
       // Contact names are title-cased on save (same rule as the company
       // name) — the import path does not go through here.
       if (table === 'contacts' && o.name) o.name = titleCaseName(o.name)
+      // Contact phones are formatted on save too — (314) 892-0032 — so a
+      // number typed as 3148920032 is stored formatted even if blur never
+      // fired. Digits are never changed, only punctuation.
+      if (table === 'contacts' && o.phone) o.phone = formatPhone(o.phone)
       return o
     })
     .filter((o) =>
@@ -724,7 +729,7 @@ function localSaveWalkInAsCustomer(kind, ticket, customerType) {
     try { localAddNote(customer.id, `Created from walk-in ${kind === 'quote' ? 'quote' : 'invoice'} ${ticket.number || ''} on ${todayStr()}.`, null) } catch (err) { /* informational only */ }
   }
   const snapshot = {
-    company: customer.company, contact_name: name, phone: phone || null,
+    company: customer.company, contact_name: name, phone: formatPhone(phone) || null,
     email: email || null, address: null, payment_terms: customer.payment_terms,
     tax_exempt: !!customer.tax_exempt,
   }
@@ -956,7 +961,10 @@ export async function globalSearch(query, state, filters = {}) {
   const walkInMatches = (t) => {
     if (!isWalkInTicket(t) || !lower) return false
     const s = t.customer_snapshot || {}
-    return [s.contact_name, s.company, s.phone, s.email]
+    // The phone compares on digits, so typing 3148920032 finds a stored
+    // (314) 892-0032; names and email compare as plain text.
+    if (phoneMatches(q, s.phone)) return true
+    return [s.contact_name, s.company, s.email]
       .some((f) => String(f || '').toLowerCase().includes(lower))
   }
 
@@ -1012,6 +1020,19 @@ export async function globalSearch(query, state, filters = {}) {
     supabase.from('quote_lines').select('*').or(`description.ilike.${like},part_number.ilike.${like}`).limit(20),
     supabase.from('invoice_lines').select('*').or(`description.ilike.${like},part_number.ilike.${like}`).limit(20),
   ])
+  // Digits search: a stored phone is formatted — (314) 892-0032 — so an
+  // ilike for 3148920032 never matches it. When the query holds at least
+  // an area code's worth of digits, pull contacts by area code and keep
+  // the ones whose digits contain the typed digits.
+  let allContacts = contacts.data || []
+  const queryDigits = q.replace(/[^0-9]/g, '')
+  if (queryDigits.length >= 3) {
+    const { data: byArea } = await supabase.from('contacts').select('*').ilike('phone', `%${queryDigits.slice(0, 3)}%`).limit(50)
+    const seenContactIds = new Set(allContacts.map((c) => c.id))
+    for (const c of byArea || []) {
+      if (!seenContactIds.has(c.id) && phoneMatches(q, c.phone)) { seenContactIds.add(c.id); allContacts.push(c) }
+    }
+  }
   // VIN suffix: fetch vehicles whose normalized VIN ends with the tail.
   let vehicleRows = vehicles.data || []
   if (vinTail8) {
@@ -1066,7 +1087,7 @@ export async function globalSearch(query, state, filters = {}) {
     for (const t of iByVeh || []) pushTicket('invoice', t, 'VIN')
   }
   // Contact matches -> their customer's tickets.
-  const contactCustomerIds = new Set((contacts.data || []).map((c) => c.customer_id))
+  const contactCustomerIds = new Set(allContacts.map((c) => c.customer_id))
   if (contactCustomerIds.size) {
     const { data: qByCust } = await supabase.from('quotes').select('*').in('customer_id', [...contactCustomerIds]).limit(20)
     for (const t of qByCust || []) pushTicket('quote', t, 'Contact')
@@ -1102,7 +1123,7 @@ export async function globalSearch(query, state, filters = {}) {
   }
   return {
     customers: customers.data || [],
-    contacts: contacts.data || [],
+    contacts: allContacts,
     vehicles: vehicleRows,
     tickets: applyTicketFilters(tickets, filters),
   }

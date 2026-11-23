@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { store } from '../lib/store.js'
 import { findCustomerByPhoneOrEmail, customerTypeOf } from '../lib/tickets.js'
+import { formatPhone } from '../lib/phones.js'
 
 // "Save as customer" for an already-saved walk-in ticket. Renders a small
 // inline card: pick Retail / Fleet, confirm, and the walk-in buyer becomes
@@ -33,7 +34,7 @@ export default function SaveWalkInAsCustomer({ kind, ticket, data, user, onDone,
     <div className="card" style={{ border: '2px solid #e67e22' }}>
       <h3 style={{ marginTop: 0 }}>Save walk-in {ticket.number} as a customer?</h3>
       <p className="muted">
-        Buyer: <strong>{snap.contact_name || snap.company || 'Walk-in'}</strong> · {snap.phone || '—'} · {snap.email || ''}
+        Buyer: <strong>{snap.contact_name || snap.company || 'Walk-in'}</strong> · {formatPhone(snap.phone) || '—'} · {snap.email || ''}
       </p>
       {existing ? (
         <p className="muted">

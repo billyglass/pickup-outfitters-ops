@@ -99,8 +99,8 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
               <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><label>Part number</label><input value={form.part_number || ''} onChange={(e) => setForm({ ...form, part_number: e.target.value })} placeholder="Optional — services usually have none" /></div>
               <div><label>Type</label><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="part">Product</option><option value="service">Service</option><option value="labor">Labor</option></select></div>
-              <div><label>Sell price</label><input type="number" min="0" step="0.01" value={form.default_price} onChange={(e) => setForm({ ...form, default_price: Number(e.target.value) })} /></div>
-              <div><label>Cost</label><input type="number" min="0" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
+              <div><label>Sell price</label><input type="number" min="0" step="0.01" placeholder="0.00" value={form.default_price || ''} onChange={(e) => setForm({ ...form, default_price: e.target.value === '' ? '' : Number(e.target.value) || 0 })} /></div>
+              <div><label>Cost</label><input type="number" min="0" step="0.01" placeholder="0.00" value={form.cost || ''} onChange={(e) => setForm({ ...form, cost: e.target.value === '' ? '' : Number(e.target.value) || 0 })} /></div>
               <div><label>Description</label><input value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
               <div><label>Taxable</label><input type="checkbox" style={{ width: 'auto' }} checked={!!form.taxable} onChange={(e) => setForm({ ...form, taxable: e.target.checked })} /> Taxable</div>
               <div><label>Active</label><input type="checkbox" style={{ width: 'auto' }} checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</div>
@@ -154,8 +154,8 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
             <div><label>Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div><label>Part number</label><input value={form.part_number || ''} onChange={(e) => setForm({ ...form, part_number: e.target.value })} placeholder="Optional — services usually have none" /></div>
             <div><label>Type</label><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option value="part">Product</option><option value="service">Service</option><option value="labor">Labor</option></select></div>
-            <div><label>Sell price</label><input type="number" min="0" step="0.01" value={form.default_price} onChange={(e) => setForm({ ...form, default_price: Number(e.target.value) })} /></div>
-            <div><label>Cost</label><input type="number" min="0" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
+            <div><label>Sell price</label><input type="number" min="0" step="0.01" placeholder="0.00" value={form.default_price || ''} onChange={(e) => setForm({ ...form, default_price: e.target.value === '' ? '' : Number(e.target.value) || 0 })} /></div>
+            <div><label>Cost</label><input type="number" min="0" step="0.01" placeholder="0.00" value={form.cost || ''} onChange={(e) => setForm({ ...form, cost: e.target.value === '' ? '' : Number(e.target.value) || 0 })} /></div>
             <div><label>Description</label><input value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
             <div><label>Taxable</label><input type="checkbox" style={{ width: 'auto' }} checked={!!form.taxable} onChange={(e) => setForm({ ...form, taxable: e.target.checked })} /> Taxable</div>
           </div>

@@ -4,6 +4,7 @@ import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFac
 import { store, globalSearch } from './lib/store.js'
 import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
+import { formatPhone } from './lib/phones.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import CustomerNotes from './components/CustomerNotes.jsx'
@@ -608,7 +609,7 @@ export default function App() {
                     <div>
                       <h3>Contacts</h3>
                       {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).map((c) => (
-                        <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {c.phone || '—'} · {c.email || '—'}</div>
+                        <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {formatPhone(c.phone) || '—'} · {c.email || '—'}</div>
                       ))}
                       {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No contacts yet.</p>}
                     </div>

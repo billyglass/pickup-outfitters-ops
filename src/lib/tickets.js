@@ -1,4 +1,5 @@
 import { normalizeVin, normalizePhone } from './csv.js'
+import { formatPhone } from './phones.js'
 import { titleCaseName } from './names.js'
 
 // Pure ticket math + snapshots, shared by TicketForm, print, and search.
@@ -226,7 +227,7 @@ export function customerSnapshot(customer, contacts, addresses) {
   return {
     company: customer.company,
     contact_name: primary?.name || null,
-    phone: primary?.phone || null,
+    phone: formatPhone(primary?.phone || '') || null,
     email: primary?.email || null,
     address: billing ? [billing.line1, billing.line2, [billing.city, billing.state, billing.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ') : null,
     payment_terms: customer.payment_terms,
@@ -511,7 +512,7 @@ export function walkInCustomerSnapshot(name, phone, email) {
     walk_in: true,
     company: null,
     contact_name: titleCaseName((name || '').trim()) || null,
-    phone: (phone || '').trim() || null,
+    phone: formatPhone((phone || '').trim()) || null,
     email: (email || '').trim() || null,
     address: null,
     payment_terms: null,
@@ -577,18 +578,23 @@ export function vehicleLabel(vehicle) {
 export function cleanLinePayload(line, parentId, parentFk, index) {
   // Only allowed columns, never id/version/timestamps. id is handled by
   // the caller (update by id, or insert without id so Postgres generates it).
+  // Empty quantity means 1 (the form lets the field clear while typing,
+  // and normalizes on blur/save — this is the safety net for any path
+  // that reaches here with a blank). An explicit 0 stays 0. The line
+  // total is computed from the NORMALIZED quantity so qty and total agree.
+  const qty = line.quantity === '' || line.quantity == null ? 1 : Number(line.quantity) || 0
   return {
     [parentFk]: parentId,
     product_id: null, // product picker removed Nov 18 — lines are typed, not picked
     part_number: (line.part_number || '').trim() || null,
     description: (line.description || '').trim(),
-    quantity: Number(line.quantity) || 0,
+    quantity: qty,
     unit_price: Number(line.unit_price) || 0,
     labor_amount: laborAmount(line),
     discount: 0, // discount removed Nov 18 — old values are ignored, never saved
     taxable: !!line.taxable,
     line_kind: 'part', // kind removed Nov 18 — every line is a parts line + optional labor $
-    line_total: lineTotal(line), // parts amount only; labor lives in labor_amount
+    line_total: lineTotal({ ...line, quantity: qty }), // parts amount only; labor lives in labor_amount
     sort_order: index,
   }
 }
