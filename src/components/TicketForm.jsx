@@ -546,8 +546,6 @@ export default function TicketForm({
           <label>Color (optional)</label>
           <input value={veh.color || ''} disabled={readOnly} placeholder="e.g. Red" onChange={(e) => { setVeh((v) => ({ ...v, color: e.target.value })); setStatus('unsaved') }} />
         </div>
-      </div>
-      <div className="vehicle-sub-row">
         <div>
           <label>Fleet / unit (optional)</label>
           <input value={veh.fleet_unit || ''} disabled={readOnly} onChange={(e) => { setVeh((v) => ({ ...v, fleet_unit: e.target.value })); setStatus('unsaved') }} />
