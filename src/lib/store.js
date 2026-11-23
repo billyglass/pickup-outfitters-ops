@@ -306,9 +306,11 @@ async function sbSyncLines(kind, parentId, lines) {
   }
   for (const id of existingIds) {
     if (!keepIds.has(id)) {
-      // Open-quote / Draft-invoice parents only for non-Admins — see
-      // migration 002 (delete policy for lines on editable tickets, and
-      // migration 008 for the Open quote status). Admins may delete any line.
+      // Open-quote / Draft-, Issued-, or Partially-Paid-invoice parents
+      // for non-Admins — see migration 002 (delete policy for lines on
+      // editable tickets), migration 008 (Open quote status), and
+      // migration 020 (Issued / Partially Paid invoices). Paid and Void
+      // parents stay Admin-only. Admins may delete any line.
       const { error } = await supabase.from(table).delete().eq('id', id)
       if (error) throw error
     }

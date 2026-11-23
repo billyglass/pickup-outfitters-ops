@@ -1010,6 +1010,18 @@ create policy "quote_lines update active" on public.quote_lines for update
 drop policy if exists "quote_lines delete admin" on public.quote_lines;
 create policy "quote_lines delete admin" on public.quote_lines for delete
   using (public.is_admin());
+-- Any active user may delete a line whose parent quote is still Open
+-- (migration 008; was 'Draft' under migration 002 before quote statuses
+-- became Open/Lost). Lost quotes stay Admin-only for line deletes.
+drop policy if exists "quote_lines delete draft" on public.quote_lines;
+create policy "quote_lines delete draft" on public.quote_lines for delete
+  using (
+    public.is_active_user()
+    and exists (
+      select 1 from public.quotes q
+      where q.id = quote_lines.quote_id and q.status = 'Open'
+    )
+  );
 
 drop policy if exists "quote_revisions read active" on public.quote_revisions;
 create policy "quote_revisions read active" on public.quote_revisions for select
@@ -1043,6 +1055,19 @@ create policy "invoice_lines update active" on public.invoice_lines for update
 drop policy if exists "invoice_lines delete admin" on public.invoice_lines;
 create policy "invoice_lines delete admin" on public.invoice_lines for delete
   using (public.is_admin());
+-- Any active user may delete a line whose parent invoice is Draft, Issued,
+-- or Partially Paid (migration 020 widened this from Draft-only so Sales
+-- can remove a line when a customer changes their mind on a part). Paid
+-- and Void invoices stay Admin-only for line deletes.
+drop policy if exists "invoice_lines delete draft" on public.invoice_lines;
+create policy "invoice_lines delete draft" on public.invoice_lines for delete
+  using (
+    public.is_active_user()
+    and exists (
+      select 1 from public.invoices i
+      where i.id = invoice_lines.invoice_id and i.status in ('Draft', 'Issued', 'Partially Paid')
+    )
+  );
 
 -- invoice_payments: any active user can read / record a payment (the
 -- sales counter takes the money); only Admin can delete one.
