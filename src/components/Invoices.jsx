@@ -46,6 +46,10 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const [fFrom, setFFrom] = useState('')
   const [fTo, setFTo] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
+  // Issued column sort (Nov 24): '' = the usual order, 'asc' = oldest
+  // first, 'desc' = newest first. Clicking the Issued header cycles
+  // through them.
+  const [sortDir, setSortDir] = useState('')
   const [voiding, setVoiding] = useState(null)
   const [voidReason, setVoidReason] = useState('')
   const [busy, setBusy] = useState('')
@@ -71,7 +75,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const linesOf = (id) => (data.invoiceLines || []).filter((l) => l.invoice_id === id)
 
   const filtered = useMemo(() => {
-    return data.invoices.filter((inv) => {
+    const rows = data.invoices.filter((inv) => {
       if (fCustomer === 'walk-in' && inv.customer_id) return false
       if (fCustomer && fCustomer !== 'walk-in' && inv.customer_id !== fCustomer) return false
       if (fSales && !(inv.salesperson_ids || []).includes(fSales)) return false
@@ -82,7 +86,14 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
       if (overdueOnly && !isOverdue(inv)) return false
       return true
     })
-  }, [data.invoices, fCustomer, fSales, fStatus, fFrom, fTo, overdueOnly])
+    if (sortDir) {
+      const dateOf = (inv) => inv.issue_date || (inv.created_at || '').slice(0, 10) || ''
+      rows.sort((a, b) => (sortDir === 'asc'
+        ? (dateOf(a) < dateOf(b) ? -1 : dateOf(a) > dateOf(b) ? 1 : 0)
+        : (dateOf(a) > dateOf(b) ? -1 : dateOf(a) < dateOf(b) ? 1 : 0)))
+    }
+    return rows
+  }, [data.invoices, fCustomer, fSales, fStatus, fFrom, fTo, overdueOnly, sortDir])
 
   const open = data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status))
   const openValue = open.reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0)
@@ -258,7 +269,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
       </div>
       <div className="table-scroll">
       <table className="list wide">
-        <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Issued</th>{isAdmin && <th className="nowrap">Due</th>}<th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
+        <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap" onClick={() => setSortDir(sortDir === '' ? 'asc' : sortDir === 'asc' ? 'desc' : '')} style={{ cursor: 'pointer' }} title="Sort by issued date">Issued {sortDir === 'asc' ? '▲' : sortDir === 'desc' ? '▼' : ''}</th>{isAdmin && <th className="nowrap">Due</th>}<th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
         <tbody>
           {filtered.map((inv) => {
             const v = data.vehicles.find((x) => x.id === inv.vehicle_id)
