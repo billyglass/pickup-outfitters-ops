@@ -205,6 +205,12 @@ tr:hover td { background: #fafafa; }
 .ticket-section.totals-section { width: max-content; max-width: 100%; margin-left: auto; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } .ticket-form .line-fields { grid-template-columns: 1fr 1fr; } .ticket-form .line-fields .line-desc { grid-column: 1 / -1; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
+/* Sales dashboard grid (Nov 24): the seven sales sections sit in a
+   2-column grid of compact cards instead of stacking full-width. Cards
+   drop their bottom margin inside the grid so rows stay tight. */
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.dash-grid .card { margin-bottom: 0; }
+@media (max-width: 700px) { .dash-grid { grid-template-columns: 1fr; } }
 /* Admin dashboard metrics (Admin-only, Nov 24) — plain CSS bars, no
    chart library. KPI tiles reuse .grid/.tile; the sections reuse
    .ticket-section cards. */

@@ -16,6 +16,7 @@ import Invoices from './components/Invoices.jsx'
 import Products from './components/Products.jsx'
 import ComboBox from './components/ComboBox.jsx'
 import AdminMetrics from './components/AdminMetrics.jsx'
+import SalesDashboard from './components/SalesDashboard.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -484,6 +485,7 @@ export default function App() {
               ))}
               {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
             </div>
+            <SalesDashboard data={data} today={todayStr} onOpenTicket={openTicket} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
             {isAdmin && (
               <AdminMetrics data={data} today={todayStr} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
             )}

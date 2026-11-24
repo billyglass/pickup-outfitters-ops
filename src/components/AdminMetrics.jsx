@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 import { computeAdminMetrics, METRIC_PERIODS, money } from '../lib/adminMetrics.js'
 
-function BarRow({ name, sub, value, display, max, onNameClick }) {
+export function BarRow({ name, sub, value, display, max, onNameClick }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
   return (
     <div className="metric-row">
