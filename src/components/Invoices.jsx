@@ -213,7 +213,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   return (
     <div className="card">
       <div className="row-between">
-        <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}) · ${money(openValue)} · Overdue ({overdue.length})</h2>
+        <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}){isAdmin ? <> · ${money(openValue)}</> : ''} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
       <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments: open an invoice and use the Payments section — deposits and partial payments, as many as the customer makes; the balance and status update on their own, and deleting a payment is Admin-only. Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>

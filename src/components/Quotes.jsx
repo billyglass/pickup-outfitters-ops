@@ -210,7 +210,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   return (
     <div className="card">
       <div className="row-between">
-        <h2 style={{ margin: 0 }}>Quotes — {view} ({filtered.length}) · ${money(shownValue)}{view === 'Open' ? ' to go after' : ''}</h2>
+        <h2 style={{ margin: 0 }}>Quotes — {view} ({filtered.length}){isAdmin ? <> · ${money(shownValue)}{view === 'Open' ? ' to go after' : ''}</> : ''}</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
       </div>
       <p className="muted small">Open quotes are the ones to go after — follow-up due and oldest first. Mark a quote Lost when the customer says no; reopen it anytime. Converting an Open quote to an invoice means you won it — it leaves this list and lives as an invoice. Quotes expire {settings?.quote_validity_days ?? 15} days after the issue date. Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.</p>
