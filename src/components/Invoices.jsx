@@ -195,6 +195,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onDelete={isAdmin && editing ? () => handleDelete(editing) : undefined}
         onRenumbered={async () => { await onReload() }}
+        onTicketChanged={async (updated) => { setEditing(updated); await onReload() }}
       />
     )
   }

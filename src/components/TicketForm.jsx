@@ -18,7 +18,7 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onView,
-  prefill, onDuplicate, onConvert, onDelete, onRenumbered,
+  prefill, onDuplicate, onConvert, onDelete, onRenumbered, onTicketChanged,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // Admin renumber (invoices only, existing invoice only): a separate
@@ -714,6 +714,15 @@ export default function TicketForm({
               status: updated.status,
               version: updated.version,
             }))
+            // And tell the list: the payment is saved in the DB, but the
+            // Invoices list, the header totals and the print view all read
+            // the App-level copy, which still holds the old balance until
+            // it reloads. The parent refreshes that copy (and the open
+            // ticket object the print view reads) so the due amount
+            // changes everywhere the moment the payment lands — no Save
+            // needed. Nov 24: Bill recorded a payment, hit Close without
+            // saving, and the due amount on the list had not moved.
+            if (updated && onTicketChanged) onTicketChanged(updated)
           }}
         />
       )}
