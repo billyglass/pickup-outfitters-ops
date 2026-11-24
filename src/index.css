@@ -295,6 +295,15 @@ tr:hover td { background: #fafafa; }
      the totals only moved halfway. With a definite height the spacer
      fills the free space and the totals sit at the page bottom; a ticket
      taller than the page overflows onto the next page as usual. */
+  /* Bottom-anchored totals, measured (Nov 24): the flex spacer above
+     never grew in Chrome print at all — the totals stayed mid-page even
+     with a definite 9.4in height (proved by Bill's Nov 24 print-preview
+     photo of INV-1009). So in print the spacer is a plain block with an
+     explicit height, measured by TicketPrint and passed as
+     --print-spacer-h; flex is turned off for it here so nothing can grow
+     or shrink it past that height. A ticket too long for one page
+     measures 0 and the totals flow after the last line, as before. */
+  .print-spacer { flex: none; height: var(--print-spacer-h, 0px); }
   /* Force the gray header / zebra rows to actually print (Chrome hides
      backgrounds by default unless this is set). */
   .print-doc, .print-lines th, .print-lines td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }

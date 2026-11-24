@@ -1,4 +1,5 @@
-import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents } from '../lib/tickets.js'
+import { useEffect, useRef, useState } from 'react'
+import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents, printSpacerHeight } from '../lib/tickets.js'
 import { formatPhone } from '../lib/phones.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
@@ -39,6 +40,26 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
   ].filter(Boolean).join(' · ')
   const vehicleText = ymm || '—'
   const contactName = snapCustomer.contact_name || ''
+  // Bottom-anchored totals (Nov 24): Chrome print does not grow a flex
+  // spacer, so the spacer gets an explicit pixel height, measured here
+  // from the content above and below it (same fonts/sizes as print).
+  // The height is passed as a CSS variable and only used in @media print
+  // — on screen the spacer still flexes into the 900px min-height doc.
+  // A ticket too long for one page measures a 0 spacer and the totals
+  // flow after the last line, as before.
+  const topRef = useRef(null)
+  const bottomRef = useRef(null)
+  const [spacerH, setSpacerH] = useState(0)
+  useEffect(() => {
+    const measure = () => {
+      const top = topRef.current ? topRef.current.scrollHeight : 0
+      const bottom = bottomRef.current ? bottomRef.current.scrollHeight : 0
+      setSpacerH(printSpacerHeight(top, bottom))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [lines, ticket])
   // Walk-in tickets have no customer record and no company — the buyer's
   // name is the contact name; the Company line is omitted for them.
   const isWalkIn = !ticket.customer_id && !!snapCustomer.walk_in
@@ -54,7 +75,8 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         {onEdit && canEdit && <button className="btn secondary" type="button" onClick={onEdit}>Edit</button>}
         <button className="btn secondary" type="button" onClick={onClose}>Close</button>
       </div>
-      <div className="print-doc">
+      <div className="print-doc" style={{ '--print-spacer-h': spacerH + 'px' }}>
+        <div ref={topRef}>
         <div className="print-header">
           <div>
             <div className="print-logo">PICKUP OUTFITTERS</div>
@@ -117,8 +139,10 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
             {(lines || []).length === 0 && <tr><td colSpan="6">No line items.</td></tr>}
           </tbody>
         </table>
+        </div>
 
         <div className="print-spacer" />
+        <div ref={bottomRef}>
         <div className="print-cols">
           <div>
             <strong>NOTES:</strong>
@@ -141,6 +165,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         <p className="print-thanks">Thank You For Your Business</p>
         {ticket.quote_id && <p className="print-small">Converted from quote — see original quote for revision history.</p>}
         {isQuote && ticket.converted_invoice_id && <p className="print-small">Converted to invoice — see invoice for the final record.</p>}
+        </div>
       </div>
     </div>
   )

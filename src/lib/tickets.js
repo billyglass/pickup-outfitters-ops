@@ -27,6 +27,24 @@ export function money(n) {
   return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// Print: the Letter page is 11in with 0.5in top/bottom margins, so the
+// print doc is 9.4in tall (a little room to spare). How tall the spacer
+// between the lines table and the totals block must be so the totals sit
+// at the bottom of the page (Nov 24 — the screenshot proved Chrome's
+// print layout does NOT grow a flex spacer into a fixed-height flex
+// container: two flex attempts left the totals mid-page. It does honor
+// an explicit pixel height on a plain block, so TicketPrint measures the
+// content above and below the spacer on screen — same fonts and sizes
+// as print — and sets the spacer to the exact gap).
+// SAFETY_PX absorbs font/margin rounding so the totals never spill onto
+// a second page; a ticket too long for one page gets a 0 spacer and the
+// totals flow after the last line, as before.
+export const PRINT_DOC_HEIGHT_PX = Math.round(9.4 * 96) // 902
+export function printSpacerHeight(topH, bottomH) {
+  const gap = Math.floor(PRINT_DOC_HEIGHT_PX - (Number(topH) || 0) - (Number(bottomH) || 0) - 30)
+  return gap > 0 ? gap : 0
+}
+
 // Parts amount for a line: qty x unit price. Discount is gone (Nov 18 —
 // Bill doesn't use it) and is ignored if an old line still carries one.
 export function lineTotal(line) {
