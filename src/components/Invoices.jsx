@@ -258,7 +258,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
       </div>
       <div className="table-scroll">
       <table className="list wide">
-        <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Issued</th><th className="nowrap">Due</th><th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
+        <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Vehicle / VIN</th><th className="nowrap">Issued</th>{isAdmin && <th className="nowrap">Due</th>}<th className="nowrap">Salesperson</th><th className="nowrap">Status</th><th className="num">Total</th><th className="num">Balance</th><th></th></tr></thead>
         <tbody>
           {filtered.map((inv) => {
             const v = data.vehicles.find((x) => x.id === inv.vehicle_id)
@@ -280,7 +280,11 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="customer" title={customerOf(inv)}>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
                 <td className="vehicle">{ymm}{bedSize ? ` · ${bedSize}` : ''}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></td>
                 <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
-                <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>
+                {/* Due date is Admin-only (Nov 24): Sales see the created /
+                    issued date and the Overdue count in the header, not a
+                    per-invoice due date. The Overdue pill lives in this
+                    cell, so it goes away for Sales along with the column. */}
+                {isAdmin && <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>}
                 <td className="nowrap">{namesOf(inv)}</td>
                 <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${money(inv.total)}</td>
