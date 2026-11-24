@@ -47,13 +47,13 @@ export default function AdminMetrics({ data, today, onOpenCustomer }) {
       </div>
       <p className="muted small" style={{ marginTop: -8 }}>Admin only — sales users don&apos;t see this section.</p>
 
-      <div className="grid" style={{ marginBottom: 16 }}>
-        <div className="tile"><div className="num">${money(kpis.billed)}</div><div className="label">Total billed</div></div>
-        <div className="tile"><div className="num">${money(kpis.collected)}</div><div className="label">Collected</div></div>
-        <div className="tile"><div className="num">${money(kpis.open)}</div><div className="label">Open balance</div></div>
-        <div className="tile"><div className="num">${money(kpis.overdue)}</div><div className="label">Overdue</div></div>
-        <div className="tile"><div className="num">${money(kpis.avg)}</div><div className="label">Avg ticket</div></div>
-        <div className="tile"><div className="num">{kpis.count}</div><div className="label">Invoices</div></div>
+      <div className="stat-strip" style={{ marginBottom: 16 }}>
+        <div className="stat"><span className="num">${money(kpis.billed)}</span><span className="label">Total billed</span></div>
+        <div className="stat"><span className="num">${money(kpis.collected)}</span><span className="label">Collected</span></div>
+        <div className="stat"><span className="num">${money(kpis.open)}</span><span className="label">Open balance</span></div>
+        <div className="stat"><span className="num">${money(kpis.overdue)}</span><span className="label">Overdue</span></div>
+        <div className="stat"><span className="num">${money(kpis.avg)}</span><span className="label">Avg ticket</span></div>
+        <div className="stat"><span className="num">{kpis.count}</span><span className="label">Invoices</span></div>
       </div>
 
       <div className="ticket-section">

@@ -429,15 +429,15 @@ export default function App() {
               <button className="btn" onClick={() => { setNewInvoiceSignal((n) => n + 1); setTab('invoices') }}>+ New invoice</button>
             </div>
             <p className="muted">Quotes and invoices are live. Receivables, payables, and reports arrive in Phases 3–4.</p>
-            <div className="grid">
-              <div className="tile"><div className="num">{data.customers.length}</div><div className="label">Customers</div></div>
-              <div className="tile"><div className="num">{data.vehicles.length}</div><div className="label">Vehicles</div></div>
-              <div className="tile"><div className="num">{data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).length}</div><div className="label">Open quotes</div></div>
-              <div className="tile"><div className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).length}</div><div className="label">Open invoices</div></div>
+            <div className="stat-strip">
+              <button type="button" className="stat" onClick={() => setTab('customers')} title="Open Customers"><span className="num">{data.customers.length}</span><span className="label">Customers</span></button>
+              <button type="button" className="stat" onClick={() => setTab('vehicles')} title="Open Vehicles"><span className="num">{data.vehicles.length}</span><span className="label">Vehicles</span></button>
+              <button type="button" className="stat" onClick={() => setTab('quotes')} title="Open Quotes"><span className="num">{data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).length}</span><span className="label">Open quotes</span></button>
+              <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).length}</span><span className="label">Open invoices</span></button>
               {isAdmin && (
                 <>
-                  <div className="tile"><div className="num">${data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).reduce((s, q) => s + Number(q.total || 0), 0).toFixed(2)}</div><div className="label">Open quote value</div></div>
-                  <div className="tile"><div className="num">${data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0).toFixed(2)}</div><div className="label">Open invoice balance</div></div>
+                  <button type="button" className="stat" onClick={() => setTab('quotes')} title="Open Quotes"><span className="num">${data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).reduce((s, q) => s + Number(q.total || 0), 0).toFixed(2)}</span><span className="label">Open quote value</span></button>
+                  <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">${data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0).toFixed(2)}</span><span className="label">Open invoice balance</span></button>
                 </>
               )}
             </div>

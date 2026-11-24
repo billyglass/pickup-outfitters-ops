@@ -37,6 +37,17 @@ h3 { font-size: 15px; margin: 16px 0 6px; }
 .tile { background: var(--white); border: 1px solid var(--grey-300); border-radius: var(--radius); padding: 16px; }
 .tile .num { font-size: 28px; font-weight: 800; }
 .tile .label { color: var(--grey-700); font-size: 13px; }
+/* Dashboard stat strip: the old tile grid gave each count a big wide
+   box (min 220px) that was mostly empty. Stats are now tight chips in
+   one wrapping row — number + label, just enough room — so the strip
+   takes one line instead of a row of tall boxes. Buttons jump to the
+   tab; plain divs (KPI tiles) are not clickable. */
+.stat-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.stat { display: inline-flex; align-items: baseline; gap: 8px; background: var(--white); border: 1px solid var(--grey-300); border-radius: var(--radius); padding: 8px 14px; font: inherit; text-align: left; }
+button.stat { cursor: pointer; }
+button.stat:hover { border-color: #d8c3a0; background: #fdf8f3; }
+.stat .num { font-size: 20px; font-weight: 800; white-space: nowrap; }
+.stat .label { color: var(--grey-700); font-size: 13px; white-space: nowrap; }
 .btn { background: var(--orange); color: #fff; border: 0; padding: 9px 16px; border-radius: 6px; font-weight: 600; }
 .btn:hover { background: var(--orange-dark); }
 .btn.secondary { background: #fff; color: var(--black); border: 1px solid var(--grey-300); }
