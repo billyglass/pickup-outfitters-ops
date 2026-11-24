@@ -18,6 +18,7 @@ import ComboBox from './components/ComboBox.jsx'
 import AdminMetrics from './components/AdminMetrics.jsx'
 import SalesDashboard from './components/SalesDashboard.jsx'
 import ShopChat from './components/ShopChat.jsx'
+import Payments from './components/Payments.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -27,6 +28,7 @@ const TABS = [
   { id: 'invoices', label: 'Invoices' },
   { id: 'products', label: 'Products & services' },
   { id: 'ar', label: 'Receivables', phase: 'Phase 3', admin: true },
+  { id: 'payments', label: 'Payments', admin: true },
   { id: 'ap', label: 'Payables', phase: 'Phase 3', admin: true },
   { id: 'reports', label: 'Reports', phase: 'Phase 4', admin: true },
   { id: 'import', label: 'Import', admin: true },
@@ -872,6 +874,9 @@ export default function App() {
             Open invoices, aging (Current, 1–30, 31–60, 61–90, 90+), partial payments, deposits,
             credits, refunds, allocations across invoices, and customer statements.
           </Placeholder>
+        )}
+        {tab === 'payments' && isAdmin && (
+          <Payments data={data} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'ap' && isAdmin && (
           <Placeholder title="Accounts payable" phase="Phase 3">

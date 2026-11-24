@@ -1567,6 +1567,20 @@ async function sbListPayments(invoiceId) {
   return data || []
 }
 
+// Every payment in the system, newest first — the Admin Payments tab
+// (reconciliation against QuickBooks, Nov 24). No migration needed:
+// the "invoice_payments read active" policy (016) already lets any
+// active user select the whole table, and the tab itself is Admin-only.
+async function sbListAllPayments() {
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .select('*')
+    .order('payment_date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
 // Which invoices have at least one payment — one query for the Invoices
 // list "Deposit due" pill. Returns the raw rows (invoice_id only is
 // enough for the pill); callers aggregate.
@@ -1647,6 +1661,14 @@ async function sbDeletePayment(paymentId, isAdmin) {
 function localListPayments(invoiceId) {
   return lsRead(LS_INVOICE_PAYMENTS, [])
     .filter((p) => p.invoice_id === invoiceId)
+    .sort((a, b) =>
+      String(b.payment_date || '').localeCompare(String(a.payment_date || '')) ||
+      String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    )
+}
+
+function localListAllPayments() {
+  return lsRead(LS_INVOICE_PAYMENTS, [])
     .sort((a, b) =>
       String(b.payment_date || '').localeCompare(String(a.payment_date || '')) ||
       String(b.created_at || '').localeCompare(String(a.created_at || ''))
@@ -1909,6 +1931,12 @@ export const store = {
   async listPaymentsForInvoices(invoiceIds) {
     if (!supabaseConfigured) return localListPaymentsForInvoices(invoiceIds)
     return sbListPaymentsForInvoices(invoiceIds)
+  },
+
+  // Every payment in the system, newest first — the Admin Payments tab.
+  async listAllPayments() {
+    if (!supabaseConfigured) return localListAllPayments()
+    return sbListAllPayments()
   },
 
   async recordPayment(invoiceId, fields, userId) {

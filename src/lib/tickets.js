@@ -198,6 +198,28 @@ export function deriveInvoiceBalance(total, paid, currentStatus) {
   return { paid: p, balanceDue, status }
 }
 
+// Payments list (Admin reconciliation, Nov 24): every payment taken,
+// newest first, filterable by date range, method, and who recorded it.
+// Payment dates are ISO YYYY-MM-DD strings, so plain string comparison
+// is a correct day comparison. Empty filter values mean "no filter".
+// Always returns newest first (payment_date, then created_at) so the
+// list is correct no matter what order the rows arrive in.
+export function filterPayments(payments, { from, to, method, recordedBy } = {}) {
+  return [...(payments || [])]
+    .filter((p) => {
+      const d = String(p.payment_date || '').slice(0, 10)
+      if (from && d < from) return false
+      if (to && d > to) return false
+      if (method && p.method !== method) return false
+      if (recordedBy && p.created_by !== recordedBy) return false
+      return true
+    })
+    .sort((a, b) =>
+      String(b.payment_date || '').localeCompare(String(a.payment_date || '')) ||
+      String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    )
+}
+
 // Display a stored YYYY-MM-DD date (or ISO timestamp) as M/D/YYYY —
 // e.g. 2026-11-18 -> 11/18/2026. Storage stays ISO; this is display
 // only. Date <input> controls are untouched (the browser renders those
