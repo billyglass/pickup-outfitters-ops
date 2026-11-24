@@ -142,7 +142,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
         </div>
 
         <div className="print-spacer" />
-        <div ref={bottomRef}>
+        <div ref={bottomRef} className="print-bottom">
         <div className="print-cols">
           <div>
             <strong>NOTES:</strong>

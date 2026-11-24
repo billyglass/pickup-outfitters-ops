@@ -289,7 +289,7 @@ tr:hover td { background: #fafafa; }
   .topbar, .banner, .print-actions, .global-search, .chat-card { display: none !important; }
   .container { max-width: none; margin: 0; padding: 0; }
   .print-sheet { max-width: none; }
-  .print-doc { border: 0; padding: 0; height: 9.4in; }
+  .print-doc { border: 0; padding: 0; height: 10in; }
   /* Definite height (not min-height) in print: Chrome's print layout does
      not reliably grow a flex spacer into min-height space, which is why
      the totals only moved halfway. With a definite height the spacer
@@ -304,6 +304,12 @@ tr:hover td { background: #fafafa; }
      or shrink it past that height. A ticket too long for one page
      measures 0 and the totals flow after the last line, as before. */
   .print-spacer { flex: none; height: var(--print-spacer-h, 0px); }
+  /* The doc fills the whole printable height (10in), so the only space
+     left below the totals is the Thank You line and the printer's own
+     bottom margin. Tighten the gaps inside the bottom block a little in
+     print so the totals sit as low as they can. */
+  .print-bottom .print-cols { margin: 8px 0; }
+  .print-bottom .print-thanks { margin-top: 12px; }
   /* Force the gray header / zebra rows to actually print (Chrome hides
      backgrounds by default unless this is set). */
   .print-doc, .print-lines th, .print-lines td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }

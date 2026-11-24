@@ -28,7 +28,7 @@ export function money(n) {
 }
 
 // Print: the Letter page is 11in with 0.5in top/bottom margins, so the
-// print doc is 9.4in tall (a little room to spare). How tall the spacer
+// print doc fills the whole 10in printable height. How tall the spacer
 // between the lines table and the totals block must be so the totals sit
 // at the bottom of the page (Nov 24 — the screenshot proved Chrome's
 // print layout does NOT grow a flex spacer into a fixed-height flex
@@ -39,9 +39,9 @@ export function money(n) {
 // SAFETY_PX absorbs font/margin rounding so the totals never spill onto
 // a second page; a ticket too long for one page gets a 0 spacer and the
 // totals flow after the last line, as before.
-export const PRINT_DOC_HEIGHT_PX = Math.round(9.4 * 96) // 902
+export const PRINT_DOC_HEIGHT_PX = Math.round(10 * 96) // 960
 export function printSpacerHeight(topH, bottomH) {
-  const gap = Math.floor(PRINT_DOC_HEIGHT_PX - (Number(topH) || 0) - (Number(bottomH) || 0) - 30)
+  const gap = Math.floor(PRINT_DOC_HEIGHT_PX - (Number(topH) || 0) - (Number(bottomH) || 0) - 16)
   return gap > 0 ? gap : 0
 }
 
