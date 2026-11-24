@@ -189,6 +189,46 @@ export function fmtDate(iso) {
   return `${Number(m[2])}/${Number(m[3])}/${m[1]}`
 }
 
+// --- Shop chat helpers (pure, no DOM) ---
+// Local calendar day of a timestamp (browser local time — the shop's
+// day, not UTC), same rule as the dashboard's localDay in App.jsx.
+export function localDayStr(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Day-separator label for the chat: Today / Yesterday / M/D/YYYY.
+export function chatDayLabel(day, today) {
+  if (!day) return ''
+  if (day === today) return 'Today'
+  if (day === addDays(today, -1)) return 'Yesterday'
+  return fmtDate(day)
+}
+
+// Short local time for under a chat bubble, e.g. "4:32 PM".
+export function chatTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+export function isOwnMessage(msg, userId) {
+  return !!msg && !!userId && msg.author_id === userId
+}
+
+export const CHAT_MAX_LENGTH = 2000
+
+// Returns '' when the draft can send, otherwise the reason it cannot.
+export function validateChatDraft(body) {
+  const text = (body || '').trim()
+  if (!text) return 'Write a message first.'
+  if (text.length > CHAT_MAX_LENGTH) return `Messages are limited to ${CHAT_MAX_LENGTH} characters.`
+  return ''
+}
+
 export function ageDays(dateStr) {
   if (!dateStr) return null
   const d = new Date(`${dateStr}T12:00:00`)

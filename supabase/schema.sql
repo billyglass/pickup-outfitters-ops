@@ -616,6 +616,21 @@ create index if not exists product_notes_product_idx
   on public.product_notes (product_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
+-- shop_messages — shop-wide message board on the dashboard (migration 022).
+-- One row per message; author name resolves from profiles in the app.
+-- No private messages in v1. Delete is own-message or Admin (RLS below);
+-- there is no update policy (no editing in v1).
+-- ---------------------------------------------------------------------------
+create table if not exists public.shop_messages (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists shop_messages_created_idx
+  on public.shop_messages (created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- product_photos — one row per photo on a product/service record (shared
 -- catalog, migration 017). File bytes live in the private 'product-photos'
 -- Storage bucket; the app serves 1-hour signed URLs. Deleting the product
@@ -872,6 +887,7 @@ alter table public.customer_photos enable row level security;
 alter table public.customer_notes enable row level security;
 alter table public.product_notes enable row level security;
 alter table public.product_photos enable row level security;
+alter table public.shop_messages enable row level security;
 
 -- profiles: every ACTIVE user can read all profiles (Sales need the full
 -- list for the salesperson picker on tickets and the salesperson filters
@@ -1189,6 +1205,18 @@ create policy "product_photos update active" on public.product_photos for update
 drop policy if exists "product_photos delete active" on public.product_photos;
 create policy "product_photos delete active" on public.product_photos for delete
   using (public.is_active_user());
+
+-- shop_messages (migration 022): any active user can read and post.
+-- Delete is own message or Admin; no update policy (no editing in v1).
+drop policy if exists "shop_messages read active" on public.shop_messages;
+create policy "shop_messages read active" on public.shop_messages for select
+  using (public.is_active_user());
+drop policy if exists "shop_messages insert active" on public.shop_messages;
+create policy "shop_messages insert active" on public.shop_messages for insert
+  with check (public.is_active_user());
+drop policy if exists "shop_messages delete own or admin" on public.shop_messages;
+create policy "shop_messages delete own or admin" on public.shop_messages for delete
+  using (auth.uid() = author_id or public.is_admin());
 
 -- Private storage bucket for customer photos + its object policies.
 -- The bucket stays private — the app serves 1-hour signed URLs, never

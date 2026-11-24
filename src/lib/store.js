@@ -11,6 +11,7 @@ import { formatPhone, phoneMatches } from './phones.js'
 const LS_CUSTOMERS = 'po_ops_customers_v1'
 const LS_CUSTOMER_NOTES = 'po_ops_customer_notes_v1'
 const LS_PRODUCT_NOTES = 'po_ops_product_notes_v1'
+const LS_SHOP_MESSAGES = 'po_ops_shop_messages_v1'
 const LS_INVOICE_PAYMENTS = 'po_ops_invoice_payments_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
@@ -1301,6 +1302,65 @@ async function sbDeleteNote(noteId) {
   if (error) throw error
 }
 
+// --- Shop chat (dashboard message board) ---
+// Newest N, returned oldest-first for display. Until migration 022 runs
+// live the table does not exist and this throws — the chat component
+// catches that and shows a not-set-up note instead of crashing.
+async function sbListMessages(limit = 50) {
+  const { data, error } = await supabase
+    .from('shop_messages')
+    .select('id, author_id, body, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).reverse()
+}
+
+async function sbPostMessage(body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write a message first.')
+  if (text.length > 2000) throw new Error('Messages are limited to 2000 characters.')
+  const { data, error } = await supabase
+    .from('shop_messages')
+    .insert({ author_id: userId, body: text })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+async function sbDeleteMessage(id, userId, isAdmin) {
+  const { data, error } = await supabase.from('shop_messages').select('author_id').eq('id', id).single()
+  if (error) throw error
+  if (!data) throw new Error('Message not found.')
+  if (data.author_id !== userId && !isAdmin) throw new Error('You can only delete your own messages.')
+  const { error: delError } = await supabase.from('shop_messages').delete().eq('id', id)
+  if (delError) throw delError
+}
+
+function localListMessages(limit = 50) {
+  return lsRead(LS_SHOP_MESSAGES, [])
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    .slice(-limit)
+}
+
+function localPostMessage(body, userId) {
+  const text = (body || '').trim()
+  if (!text) throw new Error('Write a message first.')
+  if (text.length > 2000) throw new Error('Messages are limited to 2000 characters.')
+  const msg = { id: uid(), author_id: userId, body: text, created_at: new Date().toISOString() }
+  lsWrite(LS_SHOP_MESSAGES, [...lsRead(LS_SHOP_MESSAGES, []), msg])
+  return msg
+}
+
+function localDeleteMessage(id, userId, isAdmin) {
+  const rows = lsRead(LS_SHOP_MESSAGES, [])
+  const msg = rows.find((m) => m.id === id)
+  if (!msg) throw new Error('Message not found.')
+  if (msg.author_id !== userId && !isAdmin) throw new Error('You can only delete your own messages.')
+  lsWrite(LS_SHOP_MESSAGES, rows.filter((m) => m.id !== id))
+}
+
 function localListNotes(customerId) {
   return lsRead(LS_CUSTOMER_NOTES, [])
     .filter((n) => n.customer_id === customerId)
@@ -1695,6 +1755,23 @@ export const store = {
   async deleteNote(noteId) {
     if (!supabaseConfigured) return localDeleteNote(noteId)
     return sbDeleteNote(noteId)
+  },
+
+  // --- Shop chat (dashboard message board) ---
+  // Local mode keeps messages in localStorage, same shape as Supabase rows.
+  async listMessages(limit = 50) {
+    if (!supabaseConfigured) return localListMessages(limit)
+    return sbListMessages(limit)
+  },
+
+  async postMessage(body, userId) {
+    if (!supabaseConfigured) return localPostMessage(body, userId)
+    return sbPostMessage(body, userId)
+  },
+
+  async deleteMessage(id, userId, isAdmin) {
+    if (!supabaseConfigured) return localDeleteMessage(id, userId, isAdmin)
+    return sbDeleteMessage(id, userId, isAdmin)
   },
 
   // --- Product notes log (shared catalog) ---
