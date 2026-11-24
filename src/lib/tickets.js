@@ -22,7 +22,9 @@ export function roundCents(n) {
 }
 
 export function money(n) {
-  return (Number(n) || 0).toFixed(2)
+  // Thousands separators (Nov 24 — totals were printing $12500.00 with no
+  // comma). toLocaleString keeps exactly 2 decimals like toFixed did.
+  return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 // Parts amount for a line: qty x unit price. Discount is gone (Nov 18 —
