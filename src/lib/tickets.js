@@ -446,6 +446,24 @@ export function findVehicleByVin(vehicles, vin, customerId) {
   return matches.find((v) => v.customer_id === customerId) || matches[0]
 }
 
+// Vehicle autofill from a known VIN (TicketForm): fill only the blank
+// fields from the matched vehicle record. Returns the merged fields and
+// whether anything actually changed — the form must NOT mark itself
+// Unsaved when the autofill changes nothing (Nov 24: opening an invoice
+// just to record a payment left it saying Unsaved, so the payment looked
+// unsaved too and hitting Save after the final payment then failed for
+// Sales, because a Paid invoice is locked). Year is compared as a string:
+// the form holds it as text, the record may hold a number.
+const VEHICLE_AUTOFILL_FIELDS = ['year', 'make', 'model', 'bed_size', 'fleet_unit', 'color']
+export function vehicleAutofillResult(veh, match, vehicleId) {
+  const filled = {}
+  for (const k of VEHICLE_AUTOFILL_FIELDS) filled[k] = veh?.[k] || match?.[k] || ''
+  const changed =
+    VEHICLE_AUTOFILL_FIELDS.some((k) => String(filled[k] ?? '') !== String(veh?.[k] ?? '')) ||
+    (match?.id ? vehicleId !== match.id : false)
+  return { filled, changed }
+}
+
 // Merge ticket fields into a stored vehicle record: non-blank ticket values
 // overwrite, blank ticket fields NEVER blank out stored values.
 export function mergeVehicleFields(existing, incoming) {

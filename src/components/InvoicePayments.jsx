@@ -27,6 +27,10 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
   const [busy, setBusy] = useState(false)
   const [confirmOverpay, setConfirmOverpay] = useState(null) // { amount, over } or null
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  // Record payment already saves the payment on the invoice — no Save
+  // changes needed afterwards (Nov 24). Say so outright, or the form's
+  // Save button makes it look like the payment is still waiting.
+  const [savedMsg, setSavedMsg] = useState('')
 
   const invoiceId = invoice?.id
   const total = roundCents(Number(invoice?.total) || 0)
@@ -70,6 +74,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
       setReference('')
       setNote('')
       setConfirmOverpay(null)
+      setSavedMsg(`Payment of $${money(amountToRecord)} recorded and saved on ${invoice?.number || 'this invoice'} — no need to hit Save changes.`)
       if (updated && onInvoiceUpdated) onInvoiceUpdated(updated)
     } catch (err) {
       setError(err.message || 'Could not record payment.')
@@ -96,6 +101,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
       const { invoice: updated } = await store.deletePayment(payment.id, isAdmin)
       setPayments((ps) => ps.filter((p) => p.id !== payment.id))
       setConfirmDeleteId(null)
+      setSavedMsg('Payment deleted — balance updated and saved.')
       if (updated && onInvoiceUpdated) onInvoiceUpdated(updated)
     } catch (err) {
       setError(err.message || 'Delete failed.')
@@ -124,6 +130,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
         {balance < 0 && <span className="muted"> (overpaid by ${money(-balance)})</span>}
       </p>
       {error && <div className="error">{error}</div>}
+      {savedMsg && <p className="saved-ok" style={{ marginTop: 0 }}>{savedMsg}</p>}
       {loading ? (
         <p className="muted">Loading payments…</p>
       ) : payments.length === 0 ? (
@@ -155,7 +162,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
               <label>Amount *</label>
               <input
                 type="number" min="0" step="0.01" placeholder="0.00" value={amount}
-                onChange={(e) => { setAmount(e.target.value); setConfirmOverpay(null) }}
+                onChange={(e) => { setAmount(e.target.value); setConfirmOverpay(null); setSavedMsg('') }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); record() } }}
               />
             </div>

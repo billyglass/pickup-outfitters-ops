@@ -7,7 +7,7 @@ import { formatPhone } from '../lib/phones.js'
 import {
   computeTotals, money, lineTotal, laborAmount, emptyLine, normalizeLineForForm, addDays, todayStr,
   customerSnapshot,
-  vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin,
+  vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin, vehicleAutofillResult,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
   canEditTicket, salespersonNamesOf, canEditSalespeople,
 } from '../lib/tickets.js'
@@ -137,15 +137,14 @@ export default function TicketForm({
   useEffect(() => {
     if (!vinMatch || vinNorm === lastAutofillVin.current) return
     lastAutofillVin.current = vinNorm
-    setVeh((v) => ({
-      ...v,
-      year: v.year || vinMatch.year || '',
-      make: v.make || vinMatch.make || '',
-      model: v.model || vinMatch.model || '',
-      bed_size: v.bed_size || vinMatch.bed_size || '',
-      fleet_unit: v.fleet_unit || vinMatch.fleet_unit || '',
-      color: v.color || vinMatch.color || '',
-    }))
+    // Only touch the form when the autofill actually fills something.
+    // An invoice opened just to record a payment already has every field
+    // filled, and marking it Unsaved here made the payment look unsaved
+    // too — Record payment already saves the payment on its own, so the
+    // form must stay Saved when nothing else changed.
+    const { filled, changed } = vehicleAutofillResult(veh, vinMatch, ticket.vehicle_id)
+    if (!changed) return
+    setVeh((v) => ({ ...v, ...filled }))
     setTicket((t) => (t.vehicle_id === vinMatch.id ? t : { ...t, vehicle_id: vinMatch.id }))
     setStatus('unsaved')
   }, [vinMatch, vinNorm]) // eslint-disable-line react-hooks/exhaustive-deps
