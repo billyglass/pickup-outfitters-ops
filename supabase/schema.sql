@@ -34,6 +34,7 @@ create table if not exists public.profiles (
   role text not null check (role in ('sales', 'admin')),
   active boolean not null default true,
   mfa_enrolled boolean not null default false,
+  chat_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -64,6 +65,22 @@ as $$
   );
 $$;
 
+-- Chat seen tracking (migration 023): the Shop chat new-message dot.
+-- SECURITY DEFINER so any active user can mark their OWN row seen
+-- without a broad self-update policy on profiles (which would let a
+-- sales user change their own role). Updates nothing but the caller's
+-- own chat_seen_at; profiles_guard still blocks role/active/MFA edits.
+create or replace function public.mark_chat_seen()
+returns void
+language sql security definer
+set search_path = public
+as $$
+  update public.profiles set chat_seen_at = now() where id = auth.uid();
+$$;
+
+grant execute on function public.mark_chat_seen() to authenticated;
+revoke execute on function public.mark_chat_seen() from anon;
+
 -- ---------------------------------------------------------------------------
 -- profiles — one row per Auth user. Role is the permission source of truth.
 -- Deactivation: active=false blocks ALL data access via RLS immediately.
@@ -80,6 +97,7 @@ create table if not exists public.profiles (
   role text not null check (role in ('sales', 'admin')),
   active boolean not null default true,
   mfa_enrolled boolean not null default false,
+  chat_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

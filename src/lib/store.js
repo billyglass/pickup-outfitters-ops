@@ -12,6 +12,7 @@ const LS_CUSTOMERS = 'po_ops_customers_v1'
 const LS_CUSTOMER_NOTES = 'po_ops_customer_notes_v1'
 const LS_PRODUCT_NOTES = 'po_ops_product_notes_v1'
 const LS_SHOP_MESSAGES = 'po_ops_shop_messages_v1'
+const LS_CHAT_SEEN = 'po_ops_chat_seen_v1'
 const LS_INVOICE_PAYMENTS = 'po_ops_invoice_payments_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
@@ -60,7 +61,13 @@ async function sbLoad() {
       // cannot read product_costs (still Admin-only RLS), so costs just
       // show blank instead of breaking the whole load.
       supabase.from('products').select('*').order('name', { ascending: true }),
-      supabase.from('profiles').select('id, name, email, role, active'),
+      // profiles is select('*') on purpose: the chat_seen_at column
+      // arrives with migration 023, and an explicit column list would
+      // make the whole load fail pre-migration (unknown column). With
+      // '*', pre-migration rows simply lack chat_seen_at and the dot
+      // just shows until the migration runs. profiles has no sensitive
+      // columns, so '*' is safe here.
+      supabase.from('profiles').select('*'),
       supabase.rpc('public_settings'),
     ])
   for (const r of [customers, contacts, addresses, vehicles, quotes, invoices, quoteLines, invoiceLines, products, profiles]) {
@@ -1361,6 +1368,61 @@ function localDeleteMessage(id, userId, isAdmin) {
   lsWrite(LS_SHOP_MESSAGES, rows.filter((m) => m.id !== id))
 }
 
+// --- Shop chat seen tracking (new-message dot, migration 023) ---
+// Latest message from someone ELSE — own messages never light the dot.
+// One row, cheap. Pre-migration the table exists (022 ran), so this
+// works before 023 runs; the seen side is what waits on 023.
+async function sbLatestOtherMessageAt(userId) {
+  const { data, error } = await supabase
+    .from('shop_messages')
+    .select('created_at')
+    .neq('author_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  return data?.[0]?.created_at || null
+}
+
+// SECURITY DEFINER rpc — updates only the caller's own chat_seen_at.
+// Returns true when the mark stuck, false when it did not (e.g.
+// pre-migration the function does not exist yet). NEVER throws: a
+// failed mark-seen must never break the dashboard or the chat.
+async function sbMarkChatSeen() {
+  try {
+    const { error } = await supabase.rpc('mark_chat_seen')
+    if (error) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+function localLatestOtherMessageAt(userId) {
+  const rows = lsRead(LS_SHOP_MESSAGES, []).filter((m) => m.author_id !== userId)
+  if (!rows.length) return null
+  return rows.map((m) => m.created_at).sort().pop() || null
+}
+
+// Local mode: seen time per user id in one localStorage map.
+function localMarkChatSeen(userId) {
+  try {
+    const all = lsRead(LS_CHAT_SEEN, {})
+    all[userId] = new Date().toISOString()
+    lsWrite(LS_CHAT_SEEN, all)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function localChatSeenAt(userId) {
+  try {
+    return lsRead(LS_CHAT_SEEN, {})[userId] || null
+  } catch {
+    return null
+  }
+}
+
 function localListNotes(customerId) {
   return lsRead(LS_CUSTOMER_NOTES, [])
     .filter((n) => n.customer_id === customerId)
@@ -1772,6 +1834,35 @@ export const store = {
   async deleteMessage(id, userId, isAdmin) {
     if (!supabaseConfigured) return localDeleteMessage(id, userId, isAdmin)
     return sbDeleteMessage(id, userId, isAdmin)
+  },
+
+  // --- Shop chat new-message dot ---
+  // Latest other-authored message time (null when none). Best-effort:
+  // returns null instead of throwing so the dot never breaks the app.
+  async latestOtherMessageAt(userId) {
+    if (!userId) return null
+    try {
+      if (!supabaseConfigured) return localLatestOtherMessageAt(userId)
+      return await sbLatestOtherMessageAt(userId)
+    } catch {
+      return null
+    }
+  },
+
+  // Mark the board seen. Returns true when it stuck, false when it did
+  // not (pre-migration 023 included). Never throws.
+  async markChatSeen(userId) {
+    if (!userId) return false
+    if (!supabaseConfigured) return localMarkChatSeen(userId)
+    return sbMarkChatSeen()
+  },
+
+  // Last-seen time. Supabase mode: null here — the value comes from the
+  // user's profiles row in data (sbLoad). Local mode: localStorage map.
+  chatSeenAt(userId) {
+    if (!userId) return null
+    if (!supabaseConfigured) return localChatSeenAt(userId)
+    return null
   },
 
   // --- Product notes log (shared catalog) ---

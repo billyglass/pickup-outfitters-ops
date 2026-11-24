@@ -219,6 +219,21 @@ export function isOwnMessage(msg, userId) {
   return !!msg && !!userId && msg.author_id === userId
 }
 
+// New-message dot for Shop chat: true when the latest message from
+// someone else is newer than the user's last-seen time. Own messages
+// never light it (latestOtherAt already excludes them). Null seen_at
+// (never marked seen) + any other-authored message = new. Equal
+// timestamps are not new — the message was already seen at that time.
+export function hasNewChatMessages(latestOtherAt, seenAt) {
+  if (!latestOtherAt) return false
+  const latest = new Date(latestOtherAt).getTime()
+  if (Number.isNaN(latest)) return false
+  if (!seenAt) return true
+  const seen = new Date(seenAt).getTime()
+  if (Number.isNaN(seen)) return true
+  return latest > seen
+}
+
 export const CHAT_MAX_LENGTH = 2000
 
 // Returns '' when the draft can send, otherwise the reason it cannot.

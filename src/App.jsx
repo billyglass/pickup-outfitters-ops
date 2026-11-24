@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
 import Login, { SetPassword } from './components/Login.jsx'
@@ -150,6 +150,40 @@ export default function App() {
   useEffect(() => {
     if (profile) loadData()
   }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Shop chat new-message dot: poll the latest other-authored message
+  // every 30 seconds so the Dashboard nav dot stays live even when the
+  // dashboard tab is not open. Best-effort — a failed check just leaves
+  // the dot off. No poll when nobody is signed in.
+  const [latestOtherChatAt, setLatestOtherChatAt] = useState(null)
+  useEffect(() => {
+    if (!user?.id) { setLatestOtherChatAt(null); return undefined }
+    let cancelled = false
+    async function check() {
+      const at = await store.latestOtherMessageAt(user.id)
+      if (!cancelled) setLatestOtherChatAt(at)
+    }
+    check()
+    const t = setInterval(check, 30000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Last-seen time for the dot: the current user's profiles row (sbLoad
+  // carries chat_seen_at; pre-migration 023 the field is simply absent,
+  // so the dot may show until the migration runs). Local mode keeps the
+  // seen time in localStorage instead (profiles are empty there).
+  const chatSeenAt = (data.profiles || []).find((p) => p.id === user?.id)?.chat_seen_at
+    || (!supabaseConfigured && user?.id ? store.chatSeenAt(user.id) : null)
+  const hasNewChat = hasNewChatMessages(latestOtherChatAt, chatSeenAt)
+
+  // Mark-seen succeeded: update the local copy of my profiles row so
+  // the dot clears without a full reload. (Local mode: the seen time
+  // already lives in localStorage; this setData still re-renders so the
+  // new value is picked up.)
+  function handleChatSeen() {
+    const now = new Date().toISOString()
+    setData((d) => ({ ...d, profiles: (d.profiles || []).map((p) => (p.id === user?.id ? { ...p, chat_seen_at: now } : p)) }))
+  }
 
   // Switching to another customer collapses all three history sections.
   // NOTE: this effect must live above the early returns below (Loading /
@@ -357,6 +391,7 @@ export default function App() {
           {TABS.filter((t) => !t.admin || isAdmin).map((t) => (
             <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => { setTab(t.id); setEditingCustomer(undefined); setEditingVehicle(undefined); setReturnTab(null) }}>
               {t.label}{t.phase ? ` (${t.phase})` : ''}
+              {t.id === 'dashboard' && hasNewChat && <span className="chat-dot" title="New shop chat message" />}
             </button>
           ))}
         </nav>
@@ -451,6 +486,7 @@ export default function App() {
             <p className="muted small">
               Sales users see no revenue, margin, or report data anywhere in this system — those areas are Admin-only and blocked in the database. Product costs are shared with everyone (Nov 19) so any salesman can price a service.
             </p>
+            <ShopChat data={data} user={user} isAdmin={isAdmin} hasNewChat={hasNewChat} onChatSeen={handleChatSeen} />
             <div className="card">
               <div className="row-between">
                 <h2 style={{ margin: 0 }}>Today's tickets ({todaysTickets.length})</h2>
@@ -487,7 +523,6 @@ export default function App() {
               {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
             </div>
             <SalesDashboard data={data} today={todayStr} onOpenTicket={openTicket} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
-            <ShopChat data={data} user={user} isAdmin={isAdmin} />
             {isAdmin && (
               <AdminMetrics data={data} today={todayStr} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
             )}

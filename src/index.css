@@ -279,6 +279,10 @@ tr:hover td { background: #fafafa; }
 .chat-confirm button { background: transparent; border: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
 .chat-input-row { display: flex; gap: 8px; margin-top: 12px; }
 .chat-input-row input { flex: 1; }
+/* New-message dot: small solid red-orange circle next to the Shop chat
+   heading and the Dashboard nav button. No notification, no count —
+   just a glanceable "someone posted" signal. */
+.chat-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; margin-left: 6px; vertical-align: middle; }
 @page { size: Letter; margin: 0.5in; }
 @media print {
   body { background: #fff; }
