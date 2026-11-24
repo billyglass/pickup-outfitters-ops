@@ -194,6 +194,23 @@ tr:hover td { background: #fafafa; }
 .ticket-section.totals-section { width: max-content; max-width: 100%; margin-left: auto; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } .meta-grid { grid-template-columns: 1fr; } .vehicle-row { grid-template-columns: 1fr; } .container { padding: 12px; } .profile-header-grid { grid-template-columns: 1fr; } .ticket-section.totals-section table td:first-child { white-space: normal; } .ticket-form .line-fields { grid-template-columns: 1fr 1fr; } .ticket-form .line-fields .line-desc { grid-column: 1 / -1; } }
 .login-wrap { max-width: 420px; margin: 60px auto; }
+/* Admin dashboard metrics (Admin-only, Nov 24) — plain CSS bars, no
+   chart library. KPI tiles reuse .grid/.tile; the sections reuse
+   .ticket-section cards. */
+.metric-row { display: grid; grid-template-columns: 240px 1fr 130px; gap: 4px 12px; align-items: center; padding: 8px 0; border-top: 1px solid #f0e8de; }
+.metric-row:first-of-type { border-top: 0; }
+.metric-name { min-width: 0; }
+.metric-sub { color: var(--grey-700); font-size: 13px; margin-top: 2px; }
+.metric-track { background: #f0ede8; border-radius: 999px; height: 14px; overflow: hidden; }
+.metric-bar { background: var(--orange); height: 100%; border-radius: 999px; }
+.metric-value { text-align: right; font-weight: 700; white-space: nowrap; }
+.metric-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--orange-dark); cursor: pointer; text-align: left; }
+.month-chart { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
+.month-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.month-value { font-size: 12px; color: var(--grey-700); white-space: nowrap; }
+.month-bar { width: 100%; max-width: 52px; background: var(--orange); border-radius: 4px 4px 0 0; }
+.month-label { font-size: 12px; color: var(--grey-700); }
+@media (max-width: 700px) { .metric-row { grid-template-columns: 1fr; gap: 2px; } .metric-value { text-align: left; } }
 /* --- Print: template layout, grayscale only (black / white / grays,
    no color) so it prints on the shop's B&W printer. The doc is a flex
    column with a spacer above the notes/totals block, so the totals sit
