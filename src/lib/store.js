@@ -1,6 +1,6 @@
 import { supabase, supabaseConfigured } from './supabase.js'
 import { normalizeVin, normalizePhone } from './csv.js'
-import { computeTotals, cleanLinePayload, lineTotal, roundCents, invoiceDatesOnSave, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
+import { computeTotals, cleanLinePayload, lineTotal, roundCents, invoiceDatesOnSave, invoiceBillingDates, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
 import { titleCaseName } from './names.js'
 import { formatPhone, phoneMatches } from './phones.js'
 
@@ -585,6 +585,51 @@ async function sbSetTicketStatus(kind, ticket, status, userId, extra = {}) {
   return data
 }
 
+// Bill an already-Open invoice (Nov 25): the BILLING moment — re-stamp
+// the billing date to today and the due date from the terms. Updates ONLY
+// the dates; the status never changes (a Partially Paid invoice stays
+// Partially Paid), which is why this is NOT setTicketStatus('Issued') —
+// that would reset the status and the billing clock. Only an Issued or
+// Partially Paid invoice can be billed this way; Drafts are issued, Paid
+// and Void are never re-billed. Follows the sbSetTicketStatus pattern:
+// read the current row, update with a version check (the DB trigger bumps
+// version on save).
+async function sbBillInvoice(invoice, userId) {
+  const { data: current, error: curErr } = await supabase.from('invoices').select('*').eq('id', invoice.id).single()
+  if (curErr) throw curErr
+  if (!['Issued', 'Partially Paid'].includes(current.status)) {
+    throw new Error('Only an open invoice can be billed.')
+  }
+  const dates = invoiceBillingDates(current.payment_terms)
+  const { data, error } = await supabase.from('invoices')
+    .update({ issue_date: dates.issue_date, due_date: dates.due_date })
+    .eq('id', invoice.id).eq('version', current.version).select().single()
+  if (error) throw error
+  if (!data) throw new VersionConflict('Billing conflict — this invoice changed since you opened it. Reload and try again.')
+  return data
+}
+
+// Local mirror of sbBillInvoice: same dates-only update, version bumped
+// here (no DB trigger in local mode).
+function localBillInvoice(invoice, userId) {
+  const rows = lsRead(LS_INVOICES, [])
+  const idx = rows.findIndex((r) => r.id === invoice.id)
+  if (idx < 0) throw new Error('Ticket not found.')
+  if (!['Issued', 'Partially Paid'].includes(rows[idx].status)) {
+    throw new Error('Only an open invoice can be billed.')
+  }
+  const dates = invoiceBillingDates(rows[idx].payment_terms)
+  rows[idx] = {
+    ...rows[idx],
+    issue_date: dates.issue_date,
+    due_date: dates.due_date,
+    version: (rows[idx].version || 1) + 1,
+    updated_at: new Date().toISOString(),
+  }
+  lsWrite(LS_INVOICES, rows)
+  return rows[idx]
+}
+
 async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
   // Idempotent: if this quote was already converted, return the existing
   // invoice instead of creating another one.
@@ -598,7 +643,6 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
     await supabase.from('quotes').update({ converted_invoice_id: existing.id }).eq('id', quote.id)
     return existing
   }
-  const issueDate = todayStr()
   const totals = computeTotals(quoteLines, state.settings?.tax_rate, quote.labor_lump)
   const number = await sbNextNumber('invoice')
   // The vehicle comes from the quote's ticket fields: upsert it into the
@@ -633,8 +677,9 @@ async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
         : (userId ? [userId] : []),
       created_by: userId,
       status: 'Draft',
-      issue_date: issueDate,
-      due_date: null, // Draft — no due date until it is issued (Nov 23)
+      issue_date: null, // A converted invoice is a NEW invoice (Nov 25) —
+      // no billing date until it is billed by an explicit Complete & bill.
+      due_date: null, // Draft — no due date until it is billed (Nov 23)
       po_number: quote.po_number || null,
       payment_terms: quote.payment_terms || 'COD',
       customer_notes: quote.customer_notes || null,
@@ -1984,12 +2029,18 @@ export const store = {
     return sbSetTicketStatus(kind, ticket, status, userId, extra)
   },
 
+  // Complete & bill on an already-Open invoice (Nov 25): re-stamp the
+  // billing/due dates only — status untouched. See sbBillInvoice.
+  async billInvoice(invoice, userId) {
+    if (!supabaseConfigured) return localBillInvoice(invoice, userId)
+    return sbBillInvoice(invoice, userId)
+  },
+
   async convertQuoteToInvoice(quote, quoteLines, userId, state) {
     if (!supabaseConfigured) {
       if (quote.converted_invoice_id) {
         return lsRead(LS_INVOICES, []).find((i) => i.id === quote.converted_invoice_id) || null
       }
-      const issueDate = todayStr()
       const totals = computeTotals(quoteLines, state.settings?.tax_rate, quote.labor_lump)
       const localVehicle = localUpsertVehicleFromTicket(quote.customer_id, quote.vehicle_snapshot)
       const localSnapshot = localVehicle
@@ -2015,7 +2066,7 @@ export const store = {
           ? (quote.salesperson_ids || []).filter(Boolean)
           : (userId ? [userId] : []),
         created_by: userId, status: 'Draft',
-        issue_date: issueDate, due_date: null, // Draft — no due date until it is issued (Nov 23)
+        issue_date: null, due_date: null, // A converted invoice is a NEW invoice (Nov 25) — no billing date until it is billed by an explicit Complete & bill.
         po_number: quote.po_number || null, payment_terms: quote.payment_terms || 'COD',
         customer_notes: quote.customer_notes || null, internal_notes: quote.internal_notes || null,
         customer_snapshot: quote.customer_snapshot || null, vehicle_snapshot: localSnapshot || null,

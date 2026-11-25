@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot, displayInvoiceStatus, canCompleteAndBill } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates, todayStr } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -114,6 +114,29 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     catch (err) { onError(err.message || 'Issue failed.') } finally { setBusy('') }
   }
 
+  // Complete & bill on an already-Open invoice (Nov 25): the BILLING
+  // moment. Unlike the Draft Issue action above, this MOVES dates — it
+  // re-stamps the billing date to today and the due date from the terms —
+  // so it needs a confirm, and it must say so plainly when the invoice
+  // was already billed once before. The status never changes: a Partially
+  // Paid invoice stays Partially Paid. After billing, the print view
+  // opens, ready to print/send. From the open form (opts.fromForm), the
+  // same caveat as the quote version: unsaved edits are not included.
+  async function bill(inv, opts = {}) {
+    const dates = invoiceBillingDates(inv.payment_terms)
+    const alreadyBilled = inv.issue_date
+      ? `This invoice was already billed on ${fmtDate(inv.issue_date)}. Billing it again will move the billing date to today and the due date to ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
+      : `The billing date becomes today (${fmtDate(todayStr())}) and the due date becomes ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
+    if (!window.confirm(`Bill invoice ${inv.number} now? ${alreadyBilled}. The status does not change.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    setBusy(`bill-${inv.id}`)
+    try {
+      const updated = await store.billInvoice(inv, user?.id)
+      await onReload()
+      if (updated) setPrinting(updated)
+    }
+    catch (err) { onError(err.message || 'Billing failed.') } finally { setBusy('') }
+  }
+
   async function doVoid() {
     if (!voiding || !voidReason.trim()) { onError('A reason is required to void an invoice.'); return }
     setBusy(`void-${voiding.id}`)
@@ -216,6 +239,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         }}
         onCancel={() => setEditing(undefined)}
         onView={editing ? () => setPrinting(editing) : undefined}
+        onBillInvoice={editing && ['Issued', 'Partially Paid'].includes(editing.status) ? () => bill(editing, { fromForm: true }) : undefined}
+        billInvoiceBusy={editing ? busy === `bill-${editing.id}` : false}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onDelete={isAdmin && editing ? () => handleDelete(editing) : undefined}
         onRenumbered={async () => { await onReload() }}
@@ -327,6 +352,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
                     {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => completeAndBill ? issue(inv, { openPrint: true }) : issue(inv)}>{completeAndBill ? 'Complete & bill' : 'Issue'}</button>}
+                    {['Issued', 'Partially Paid'].includes(inv.status) && completeAndBill && <button className="btn secondary small" disabled={busy === `bill-${inv.id}`} onClick={() => bill(inv)}>Complete &amp; bill</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (
                       <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}

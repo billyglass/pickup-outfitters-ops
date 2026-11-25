@@ -18,7 +18,7 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onView,
-  prefill, onDuplicate, onConvert, onCompleteAndBill, completeAndBillBusy, onDelete, onRenumbered, onTicketChanged,
+  prefill, onDuplicate, onConvert, onCompleteAndBill, completeAndBillBusy, onBillInvoice, billInvoiceBusy, onDelete, onRenumbered, onTicketChanged,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // Admin renumber (invoices only, existing invoice only): a separate
@@ -809,6 +809,16 @@ export default function TicketForm({
           </>
         )}
         {!readOnly && (isQuote || (initial && initial.status !== 'Draft')) && <button className="btn" type="submit" disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : initial ? 'Save changes' : `Save ${isQuote ? 'quote' : 'invoice'}`}</button>}
+        {/* Complete & bill on an already-Open invoice (Nov 25): the BILLING
+            moment for a fleet/terms account — re-stamps the billing/due
+            dates without touching the status. type="button", NOT a submit:
+            it bills the SAVED invoice (same caveat as the quote version —
+            unsaved edits are not included). Sits next to Save changes; the
+            Draft form keeps its relabeled primary button. Visibility
+            follows the CURRENT form customer/terms. */}
+        {!readOnly && !isQuote && initial && ['Issued', 'Partially Paid'].includes(initial.status) && onBillInvoice && canCompleteAndBill(ticket, customer) && (
+          <button className="btn" type="button" disabled={billInvoiceBusy} onClick={onBillInvoice}>Complete &amp; bill</button>
+        )}
         {initial && onView && (
           <button
             className="btn secondary" type="button"

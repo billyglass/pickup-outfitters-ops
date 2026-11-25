@@ -150,7 +150,12 @@ export function dueDateFor(issueDate, terms) {
 // customer's profile can carry longer terms (Net 60 is already a Terms
 // option on the customer profile) — picking such a customer brings their
 // terms onto the ticket and the due date follows from the billing date.
-//  - new invoice: issue = today; due = Issued ? (COD ? null : today+terms) : null (a Draft has no due date yet)
+//  - new invoice: issue = null, due = null — creation is NOT billing (Nov
+//    25). ALL created invoices are Open even if the job isn't done yet;
+//    Draft is only for a ticket still being written. The billing date and
+//    due date are stamped later, by an explicit Complete & bill, so the
+//    terms clock runs from billing, not from creation (equipment wait time
+//    must not eat the terms).
 //  - Draft -> Issued: issue = today (the billing date); due = COD ? null : today+terms
 //  - Draft saved as Draft: keep the saved issue_date; due = null
 //  - Issued (or later) edited: keep the saved issue_date and due_date,
@@ -166,7 +171,7 @@ export function invoiceDatesOnSave({ isNew, currentStatus, currentIssueDate, cur
     return String(terms || '').trim().toLowerCase() === 'cod' ? null : dueDateFor(issue, terms)
   }
   if (isNew) {
-    return { issue_date: today, due_date: newStatus === 'Issued' ? dueFor(today, newTerms) : null }
+    return { issue_date: null, due_date: null }
   }
   if (currentStatus === 'Draft' && newStatus === 'Issued') {
     return { issue_date: today, due_date: dueFor(today, newTerms) }
@@ -178,6 +183,17 @@ export function invoiceDatesOnSave({ isNew, currentStatus, currentIssueDate, cur
     return { issue_date: currentIssueDate || null, due_date: dueFor(currentIssueDate, newTerms) }
   }
   return { issue_date: currentIssueDate || null, due_date: currentDueDate || null }
+}
+
+// Billing dates (Nov 25): the billing moment, used by Complete & bill on
+// an already-Open invoice — issue = today (the billing date), due = today
+// + terms (COD has no due date). Mirrors the Draft -> Issued branch of
+// invoiceDatesOnSave, but as a standalone computation: billing re-stamps
+// the dates WITHOUT touching the status, so a Partially Paid invoice
+// stays Partially Paid. Pure function, shared by both backends.
+export function invoiceBillingDates(terms) {
+  const today = todayStr()
+  return { issue_date: today, due_date: String(terms || '').trim().toLowerCase() === 'cod' ? null : dueDateFor(today, terms) }
 }
 
 // --- Invoice payments (Phase 3, Nov 19) ----------------------------------
@@ -717,16 +733,19 @@ export function customerTypeOf(customer) {
 }
 
 // "Complete & bill" (Nov 25): a fleet/terms job is done and the customer
-// can be billed. One rule for both kinds: an Open, unconverted quote or
-// a Draft invoice, for a fleet customer or a terms account — walk-ins are
-// COD with no customer, so they never see it; a Retail customer on Net 30
-// does (a terms account). Quotes never carry a Draft status and invoices
-// never carry an Open one, so the status check is safe for both; only
-// quotes carry converted_invoice_id. customer is the linked customer
-// record (null/undefined for a walk-in).
+// can be billed. Billing is a separate moment from creation — ALL created
+// invoices are Open until paid in full, and Draft is only for a ticket
+// still being written. One rule for both kinds: an Open, unconverted
+// quote, a Draft invoice, or an already-Open (Issued / Partially Paid)
+// invoice, for a fleet customer or a terms account — walk-ins are COD with
+// no customer, so they never see it; a Retail customer on Net 30 does (a
+// terms account). Quotes never carry a Draft/Issued/Partially Paid status
+// and invoices never carry an Open one, so the status check is safe for
+// both; only quotes carry converted_invoice_id. customer is the linked
+// customer record (null/undefined for a walk-in).
 export function canCompleteAndBill(ticket, customer) {
   if (!ticket) return false
-  if (ticket.status !== 'Open' && ticket.status !== 'Draft') return false
+  if (!['Open', 'Draft', 'Issued', 'Partially Paid'].includes(ticket.status)) return false
   if (ticket.converted_invoice_id) return false
   if (customer && customer.customer_type === 'Fleet') return true
   return !isCodTicket(ticket)
