@@ -20,6 +20,7 @@ import SalesDashboard from './components/SalesDashboard.jsx'
 import ShopChat from './components/ShopChat.jsx'
 import Payments from './components/Payments.jsx'
 import AccountsReceivable from './components/AccountsReceivable.jsx'
+import EndOfDay from './components/EndOfDay.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -30,6 +31,11 @@ const TABS = [
   { id: 'products', label: 'Products & services' },
   { id: 'ar', label: 'Receivables', phase: 'Phase 3', admin: true },
   { id: 'payments', label: 'Payments', admin: true },
+  // End of day (Nov 25): NO admin flag on purpose — whoever is closing
+  // that day fills it out, and the day's rows (including per-row profit)
+  // are visible to them. Only the totals strip, the cash line, and the
+  // sold square's money are Admin-only, gated inside the component.
+  { id: 'endofday', label: 'End of day' },
   { id: 'ap', label: 'Payables', phase: 'Phase 3', admin: true },
   { id: 'reports', label: 'Reports', phase: 'Phase 4', admin: true },
   { id: 'import', label: 'Import', admin: true },
@@ -943,6 +949,9 @@ export default function App() {
         )}
         {tab === 'payments' && isAdmin && (
           <Payments data={data} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
+        )}
+        {tab === 'endofday' && (
+          <EndOfDay data={data} today={todayStr} isAdmin={isAdmin} onReload={loadData} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'ap' && isAdmin && (
           <Placeholder title="Accounts payable" phase="Phase 3">

@@ -640,6 +640,44 @@ function localBillInvoice(invoice, userId) {
   return rows[idx]
 }
 
+// Set the cost of goods on one invoice (End of day, Nov 25). Cost is
+// recorded ONLY here — the ticket form never sends it (sbSaveTicket's
+// header whitelist does not include cost_of_goods, and must stay that
+// way). Same read-then-version-checked-update pattern as sbBillInvoice:
+// the DB trigger bumps version on save. Pre-migration (025 not run yet)
+// the update fails with PGRST204 (unknown column) — the caller catches
+// that and shows a "not ready yet" message instead of breaking the page.
+// Note the invoice_guard trigger still applies: a Sales user cannot
+// change a Paid / Void / closed-period invoice, so setting cost on one
+// of those fails with the guard's message.
+async function sbSetInvoiceCost(invoiceId, cost) {
+  const { data: current, error: curErr } = await supabase.from('invoices').select('*').eq('id', invoiceId).single()
+  if (curErr) throw curErr
+  const patch = { cost_of_goods: cost == null ? null : roundCents(Number(cost) || 0) }
+  const { data, error } = await supabase.from('invoices')
+    .update(patch)
+    .eq('id', invoiceId).eq('version', current.version).select().single()
+  if (error) throw error
+  if (!data) throw new VersionConflict('Cost change conflict — reload and try again.')
+  return data
+}
+
+// Local mirror of sbSetInvoiceCost: same single-column update, version
+// bumped here (no DB trigger in local mode).
+function localSetInvoiceCost(invoiceId, cost) {
+  const rows = lsRead(LS_INVOICES, [])
+  const idx = rows.findIndex((r) => r.id === invoiceId)
+  if (idx < 0) throw new Error('Ticket not found.')
+  rows[idx] = {
+    ...rows[idx],
+    cost_of_goods: cost == null ? null : roundCents(Number(cost) || 0),
+    version: (rows[idx].version || 1) + 1,
+    updated_at: new Date().toISOString(),
+  }
+  lsWrite(LS_INVOICES, rows)
+  return rows[idx]
+}
+
 async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
   // Idempotent: if this quote was already converted, return the existing
   // invoice instead of creating another one.
@@ -2056,6 +2094,13 @@ export const store = {
   async billInvoice(invoice, userId) {
     if (!supabaseConfigured) return localBillInvoice(invoice, userId)
     return sbBillInvoice(invoice, userId)
+  },
+
+  // Cost of goods on one invoice (End of day, Nov 25) — the ONLY way
+  // cost is written. The ticket form never sends it.
+  async setInvoiceCost(invoiceId, cost) {
+    if (!supabaseConfigured) return localSetInvoiceCost(invoiceId, cost)
+    return sbSetInvoiceCost(invoiceId, cost)
   },
 
   async convertQuoteToInvoice(quote, quoteLines, userId, state) {

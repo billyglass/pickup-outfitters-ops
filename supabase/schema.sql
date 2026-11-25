@@ -407,6 +407,10 @@ create table if not exists public.invoices (
   total numeric(12,2) not null default 0,
   labor_lump numeric(12,2) not null default 0,
   balance_due numeric(12,2) not null default 0,
+  -- Cost of goods (migration 025, End of day Nov 25): one number per
+  -- invoice, entered ONLY on the End of day tab — never on the ticket
+  -- form (sbSaveTicket's header whitelist does not include it).
+  cost_of_goods numeric(12,2),
   accounting_period_closed boolean not null default false,
   void_reason text,
   created_at timestamptz not null default now(),
