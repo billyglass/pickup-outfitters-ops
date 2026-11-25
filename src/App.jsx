@@ -354,12 +354,14 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
   const todayStr = localDay(new Date().toISOString())
-  const todaysTickets = [
-    ...data.quotes.map((t) => ({ type: 'quote', t })),
-    ...data.invoices.map((t) => ({ type: 'invoice', t })),
-  ]
-    .filter(({ t }) => localDay(t.created_at || t.issue_date) === todayStr)
-    .sort((a, b) => String(b.t.created_at || '').localeCompare(String(a.t.created_at || '')))
+  // Today's tickets, split by kind (Nov 25): one list for invoices, one
+  // for quotes — Bill wants them separate, not combined.
+  const todaysInvoices = data.invoices
+    .filter((t) => localDay(t.created_at || t.issue_date) === todayStr)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+  const todaysQuotes = data.quotes
+    .filter((t) => localDay(t.created_at || t.issue_date) === todayStr)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
   const chaseQuotes = data.quotes
     .filter((q) => q.status === 'Open' && !q.converted_invoice_id)
     .sort((a, b) => {
@@ -491,17 +493,34 @@ export default function App() {
             <ShopChat data={data} user={user} isAdmin={isAdmin} hasNewChat={hasNewChat} onChatSeen={handleChatSeen} />
             <div className="card">
               <div className="row-between">
-                <h2 style={{ margin: 0 }}>Today's tickets ({todaysTickets.length})</h2>
+                <h2 style={{ margin: 0 }}>Today's invoices ({todaysInvoices.length})</h2>
                 <span className="muted small">{fmtDate(todayStr)}</span>
               </div>
-              <p className="muted small">Quotes and invoices created today — newest first. View shows the print version; Edit opens the form.</p>
-              {todaysTickets.length === 0 && <p className="muted">No tickets created today yet.</p>}
-              {todaysTickets.map(({ type, t }) => (
-                <div key={`${type}-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} <span className="pill">{type === 'quote' ? 'Quote' : 'Invoice'}</span> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
+              <p className="muted small">Invoices created today — newest first. View shows the print version; Edit opens the form.</p>
+              {todaysInvoices.length === 0 && <p className="muted">No invoices created today yet.</p>}
+              {todaysInvoices.map((t) => (
+                <div key={`invoice-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
                   <span>
-                    <button className="btn small" onClick={() => openTicket(type, t.id, 'view')}>View</button>{' '}
-                    <button className="btn secondary small" onClick={() => openTicket(type, t.id, 'edit')}>Edit</button>
+                    <button className="btn small" onClick={() => openTicket('invoice', t.id, 'view')}>View</button>{' '}
+                    <button className="btn secondary small" onClick={() => openTicket('invoice', t.id, 'edit')}>Edit</button>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div className="row-between">
+                <h2 style={{ margin: 0 }}>Today's quotes ({todaysQuotes.length})</h2>
+                <span className="muted small">{fmtDate(todayStr)}</span>
+              </div>
+              <p className="muted small">Quotes created today — newest first. View shows the print version; Edit opens the form.</p>
+              {todaysQuotes.length === 0 && <p className="muted">No quotes created today yet.</p>}
+              {todaysQuotes.map((t) => (
+                <div key={`quote-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
+                  <span>
+                    <button className="btn small" onClick={() => openTicket('quote', t.id, 'view')}>View</button>{' '}
+                    <button className="btn secondary small" onClick={() => openTicket('quote', t.id, 'edit')}>Edit</button>
                   </span>
                 </div>
               ))}
