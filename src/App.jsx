@@ -19,6 +19,7 @@ import AdminMetrics from './components/AdminMetrics.jsx'
 import SalesDashboard from './components/SalesDashboard.jsx'
 import ShopChat from './components/ShopChat.jsx'
 import Payments from './components/Payments.jsx'
+import AccountsReceivable from './components/AccountsReceivable.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -889,10 +890,7 @@ export default function App() {
           <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />
         )}
         {tab === 'ar' && isAdmin && (
-          <Placeholder title="Accounts receivable" phase="Phase 3">
-            Open invoices, aging (Current, 1–30, 31–60, 61–90, 90+), partial payments, deposits,
-            credits, refunds, allocations across invoices, and customer statements.
-          </Placeholder>
+          <AccountsReceivable data={data} today={todayStr} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'payments' && isAdmin && (
           <Payments data={data} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
