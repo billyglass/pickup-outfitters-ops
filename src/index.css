@@ -72,6 +72,13 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 table.list td.customer { max-width: 240px; }
 table.list td.vehicle { white-space: nowrap; }
 table.list td .sub { white-space: nowrap; }
+/* List tables (Nov 25 cleanup): once the loud buttons went quiet the rows
+   ran together as one white sheet — alternating row tints and a slightly
+   stronger row border give each row its own band, and a light header
+   anchors the columns. */
+table.list tbody tr:nth-child(even) td { background: #f7f6f3; }
+table.list th, table.list td { border-bottom-color: #e3e1dc; }
+table.list thead th { background: #f2f1ed; }
 /* Row actions stay on one line, compact buttons. */
 .row.actions { flex-wrap: nowrap; gap: 6px; }
 .btn.small { padding: 6px 10px; font-size: 13px; }
