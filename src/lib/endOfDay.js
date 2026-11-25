@@ -124,6 +124,28 @@ export function collectedTotals(rows) {
   }
 }
 
+// Month calendar cells for the Past days view (Nov 25): weeks of 7,
+// Sunday-first, null for blank cells. Each day: { date: 'YYYY-MM-DD',
+// day, active (anything collected or billed that day), isToday }.
+// Built from y/m/d numbers directly — no Date parsing, so no timezone
+// surprises (the weekday of a calendar date is the same in any zone).
+export function calendarCells(year, month, activeDates, todayStr) {
+  const active = activeDates instanceof Set ? activeDates : new Set(activeDates || [])
+  const firstWeekday = new Date(year, month, 1).getDay() // 0 = Sunday
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const pad = (n) => String(n).padStart(2, '0')
+  const cells = []
+  for (let i = 0; i < firstWeekday; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${year}-${pad(month + 1)}-${pad(d)}`
+    cells.push({ date, day: d, active: active.has(date), isToday: date === todayStr })
+  }
+  while (cells.length % 7 !== 0) cells.push(null)
+  const weeks = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+  return weeks
+}
+
 // Past days (Nov 25): one summary per date with any activity — a payment
 // collected or an invoice billed that day — newest first, capped at the
 // most recent 60 such days so the list never runs away. This is how Bill

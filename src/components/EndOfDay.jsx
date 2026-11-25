@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate, money, roundCents, ticketCustomerName, salespersonNamesOf } from '../lib/tickets.js'
-import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory } from '../lib/endOfDay.js'
+import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory, calendarCells } from '../lib/endOfDay.js'
 
 // End of day (Nov 25) — Bill's spreadsheet, in the app. Two parts:
 //   1. Collected today: one row per invoice with money collected on the
@@ -94,6 +94,11 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
   const [payError, setPayError] = useState('')
   const [addText, setAddText] = useState('')
   const [addMsg, setAddMsg] = useState('')
+  // Calendar month shown in the Past days card (0 = January). Starts on
+  // the current month; picking a day anywhere moves it to that day's
+  // month so the calendar and the sheet stay in sync.
+  const [calYear, setCalYear] = useState(() => Number(String(today).slice(0, 4)))
+  const [calMonth, setCalMonth] = useState(() => Number(String(today).slice(5, 7)) - 1)
 
   useEffect(() => {
     let alive = true
@@ -155,8 +160,25 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [payments, data.invoices, linesByInvoice, data.settings, costOverrides])
 
+  const activeDates = useMemo(() => new Set(history.map((d) => d.date)), [history])
+  const calWeeks = useMemo(() => calendarCells(calYear, calMonth, activeDates, today), [calYear, calMonth, activeDates, today])
+  const monthLabel = new Date(calYear, calMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  function calStep(delta) {
+    const m = calMonth + delta
+    if (m < 0) { setCalYear(calYear - 1); setCalMonth(11) }
+    else if (m > 11) { setCalYear(calYear + 1); setCalMonth(0) }
+    else setCalMonth(m)
+  }
+  function calToday() {
+    setCalYear(Number(String(today).slice(0, 4)))
+    setCalMonth(Number(String(today).slice(5, 7)) - 1)
+  }
+
   function changeDate(d) {
     setDate(d)
+    setCalYear(Number(String(d).slice(0, 4)))
+    setCalMonth(Number(String(d).slice(5, 7)) - 1)
     setAddedIds([])
     setAddMsg('')
   }
@@ -292,7 +314,46 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
       <div className="row-between">
         <h2 style={{ margin: 0 }}>Past days</h2>
       </div>
-      <p className="muted small">Every day with anything collected or billed — pick a date to load that day&apos;s sheet above. Good for checking historically whether a day like New Year&apos;s Eve was worth being open.</p>
+      <p className="muted small">Every day with anything collected or billed — pick a date on the calendar or in the list below to load that day&apos;s sheet above. Good for checking historically whether a day like New Year&apos;s Eve was worth being open.</p>
+      <div style={{ maxWidth: 420 }}>
+        <div className="row-between" style={{ marginBottom: 4 }}>
+          <button type="button" className="btn secondary small" onClick={() => calStep(-1)} aria-label="Previous month">‹</button>
+          <strong>{monthLabel}</strong>
+          <span>
+            <button type="button" className="btn secondary small" onClick={calToday} style={{ marginRight: 6 }}>Today</button>
+            <button type="button" className="btn secondary small" onClick={() => calStep(1)} aria-label="Next month">›</button>
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+            <div key={i} style={{ fontSize: 11, color: 'var(--grey-700)', fontWeight: 700, padding: '4px 0' }}>{d}</div>
+          ))}
+          {calWeeks.flat().map((cell, i) => cell == null ? <div key={i} /> : (
+            <button
+              key={cell.date}
+              type="button"
+              onClick={() => changeDate(cell.date)}
+              aria-label={`Load ${fmtDate(cell.date)}`}
+              style={{
+                border: 0,
+                background: cell.date === date ? 'var(--orange)' : 'transparent',
+                color: cell.date === date ? '#fff' : 'inherit',
+                borderRadius: 8,
+                width: 36, height: 38, margin: '0 auto', cursor: 'pointer',
+                fontWeight: cell.isToday || cell.date === date ? 700 : 400,
+                outline: cell.isToday && cell.date !== date ? '1.5px solid var(--orange)' : 'none',
+                outlineOffset: 1, padding: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                fontSize: 14,
+              }}
+            >
+              <span>{cell.day}</span>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: cell.active ? (cell.date === date ? '#fff' : 'var(--orange-dark)') : 'transparent' }} />
+            </button>
+          ))}
+        </div>
+        <p className="muted small" style={{ marginTop: 6 }}>Dots mark days with something collected or billed. Tap a day to load its sheet.</p>
+      </div>
       {payLoading ? (
         <p className="muted">Loading payments…</p>
       ) : history.length === 0 ? (
