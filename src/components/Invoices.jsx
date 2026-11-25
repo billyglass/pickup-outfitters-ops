@@ -297,7 +297,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     cell, so it goes away for Sales along with the column. */}
                 {isAdmin && <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>}
                 <td className="nowrap">{namesOf(inv)}</td>
-                <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
+                <td className="nowrap">{inv.status === 'Paid' ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>Paid</span> : inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${money(inv.total)}</td>
                 {/* Paid in full (Nov 25): the balance is $0 — show green PIF
                     instead of $0.00. An overpaid invoice (negative balance)
