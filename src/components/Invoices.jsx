@@ -299,7 +299,10 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                 <td className="nowrap">{namesOf(inv)}</td>
                 <td className="nowrap">{inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${money(inv.total)}</td>
-                <td className="num">${money(inv.balance_due ?? inv.total ?? 0)}</td>
+                {/* Paid in full (Nov 25): the balance is $0 — show green PIF
+                    instead of $0.00. An overpaid invoice (negative balance)
+                    still shows the amount, so the credit isn't hidden. */}
+                <td className="num">{inv.status === 'Paid' && Number(inv.balance_due ?? inv.total ?? 0) === 0 ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>PIF</span> : `$${money(inv.balance_due ?? inv.total ?? 0)}`}</td>
                 <td>
                   <div className="row actions">
                     <button className="btn small" onClick={() => setPrinting(inv)}>View</button>
