@@ -325,3 +325,43 @@ tr:hover td { background: #fafafa; }
 }
 .logo-mark { font-size: 28px; font-weight: 800; }
 .logo-mark span { color: var(--orange); }
+
+/* --- Dashboard restyle (Nov 25): modern minimal, monochrome. ---
+   Bill liked the dashboard info and layout but not the colors — black
+   instead of light orange for header color, 2026 not 2000. Every rule
+   here is scoped under .dashboard (App.jsx wraps the dashboard tab in
+   it), so the ticket form (warm tint, sage line items, orange heading
+   bands), the lists, the customer profile, and login are untouched.
+   The only color left on the dashboard is functional: the chat keeps
+   its blue own-bubbles and red new-message dot, flags stay amber.
+   Wrapped in @media screen so print is untouched. */
+@media screen {
+  .dashboard h1 { color: #111827; letter-spacing: -0.02em; }
+  .dashboard h2 { font-size: 16px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
+  .dashboard .muted { color: #6b7280; }
+  /* Cards: white, hairline neutral border, 12px radius, one soft shadow. */
+  .dashboard .card { border: 1px solid #e5e5e7; border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  /* Stat chips: uppercase micro-labels, strong tabular numbers. */
+  .dashboard .stat { border: 1px solid #e5e5e7; border-radius: 12px; }
+  .dashboard .stat .num { color: #111827; font-variant-numeric: tabular-nums; }
+  .dashboard .stat .label { color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .dashboard button.stat:hover { border-color: #111827; background: #f9fafb; }
+  /* Section cards (Admin metrics): the light-orange heading bands
+     become solid near-black with white text. Shell matches .card. */
+  .dashboard .ticket-section { border: 1px solid #e5e5e7; border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  .dashboard .ticket-section > h3 { background: #161616; color: #fff; border-bottom-color: #161616; border-radius: 12px 12px 0 0; }
+  /* Bars: near-black on light-gray tracks; values tabular. */
+  .dashboard .metric-row { border-top-color: #e5e5e7; }
+  .dashboard .metric-track { background: #e5e7eb; }
+  .dashboard .metric-bar { background: #161616; }
+  .dashboard .month-bar { background: #161616; }
+  .dashboard .metric-value { color: #111827; font-variant-numeric: tabular-nums; }
+  .dashboard .metric-sub, .dashboard .month-value, .dashboard .month-label { color: #6b7280; }
+  .dashboard .metric-link { color: #111827; }
+  /* Buttons: monochrome. Primary near-black, secondary white/border. */
+  .dashboard .btn { background: #161616; }
+  .dashboard .btn:hover { background: #000; }
+  .dashboard .btn.secondary { background: #fff; color: #111827; border-color: #e5e5e7; }
+  .dashboard .btn.secondary:hover { background: #f9fafb; border-color: #111827; }
+  .dashboard input:focus, .dashboard select:focus, .dashboard textarea:focus { outline-color: #161616; border-color: #161616; }
+}

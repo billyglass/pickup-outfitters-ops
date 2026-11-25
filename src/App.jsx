@@ -462,7 +462,7 @@ export default function App() {
         {loading && <p className="muted">Loading…</p>}
 
         {tab === 'dashboard' && (
-          <>
+          <div className="dashboard">
             <div className="row-between">
               <h1 style={{ margin: 0 }}>Dashboard</h1>
               <button className="btn" onClick={() => { setNewInvoiceSignal((n) => n + 1); setTab('invoices') }}>+ New invoice</button>
@@ -528,7 +528,7 @@ export default function App() {
             {isAdmin && (
               <AdminMetrics data={data} today={todayStr} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
             )}
-          </>
+          </div>
         )}
 
         {tab === 'search' && searchResults && (
