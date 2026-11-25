@@ -198,6 +198,18 @@ export function deriveInvoiceBalance(total, paid, currentStatus) {
   return { paid: p, balanceDue, status }
 }
 
+// Payments display (Nov 25): paid-so-far and balance due count both
+// recorded payments and payments staged while the invoice is still being
+// written — a new invoice has no id yet, so its payments wait in the form
+// until Save writes them. Returns { paid, balance, pendingTotal,
+// pendingCount }.
+export function invoicePaymentSummary(total, livePayments, pendingPayments) {
+  const live = roundCents((livePayments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))
+  const pendingTotal = roundCents((pendingPayments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))
+  const paid = roundCents(live + pendingTotal)
+  return { paid, balance: roundCents((Number(total) || 0) - paid), pendingTotal, pendingCount: (pendingPayments || []).length }
+}
+
 // Payments list (Admin reconciliation, Nov 24): every payment taken,
 // newest first, filterable by date range, method, and who recorded it.
 // Payment dates are ISO YYYY-MM-DD strings, so plain string comparison

@@ -79,6 +79,15 @@ export default function TicketForm({
     return vehicleFieldsFromSnapshot(src?.vehicle_snapshot || null, linked)
   })
   const [status, setStatus] = useState('saved')
+  // Payments staged while writing a NEW invoice (Nov 25): a payment has
+  // nowhere to live until the invoice exists, so it waits here and is
+  // written right after Save. Staging marks the form unsaved, so the View
+  // button's unsaved-changes warning covers a staged payment too.
+  const [pendingPayments, setPendingPaymentsRaw] = useState([])
+  const setPendingPayments = (next) => {
+    setPendingPaymentsRaw(next)
+    setStatus('unsaved')
+  }
   // Which save button was used (Create invoice / Save as draft / Save &
   // issue). The buttons are type="submit", so each click sets this before
   // the form's onSubmit fires; Enter submits via the first (primary)
@@ -339,6 +348,35 @@ export default function TicketForm({
         saveLines,
         user?.id
       )
+      // Payments staged while writing this invoice (Nov 25): they had
+      // nowhere to live until the invoice existed. Now that it does, write
+      // them. If one fails, keep the form open with the failed payments
+      // still staged (they show under Payments with a Retry) instead of
+      // closing and losing them — the invoice itself is saved either way.
+      // Hitting Save again retries them too.
+      if (!isQuote && pendingPayments.length) {
+        const failed = []
+        let firstErr = null
+        let lastUpdated = null
+        for (const p of pendingPayments) {
+          try {
+            const { invoice: updated } = await store.recordPayment(saved.id, {
+              amount: p.amount, payment_date: p.payment_date, method: p.method, reference: p.reference, note: p.note,
+            }, user?.id)
+            if (updated) lastUpdated = updated
+          } catch (payErr) {
+            if (!firstErr) firstErr = payErr
+            failed.push(p)
+          }
+        }
+        setPendingPaymentsRaw(failed)
+        if (failed.length) {
+          setTicket(lastUpdated || saved)
+          setStatus('saved')
+          setError(`Invoice saved, but ${failed.length === 1 ? 'a payment' : `${failed.length} payments`} could not be recorded${firstErr?.message ? `: ${firstErr.message}` : ''}. ${failed.length === 1 ? 'It is' : 'They are'} still listed under Payments — hit Retry to record ${failed.length === 1 ? 'it' : 'them'}.`)
+          return
+        }
+      }
       // Walk-in + "save as customer": the ticket is saved first (as a
       // walk-in), then the buyer becomes a customer record and the ticket
       // links to it. If that second step fails, the ticket itself is still
@@ -703,6 +741,9 @@ export default function TicketForm({
           isAdmin={isAdmin}
           userId={user?.id}
           readOnly={readOnly}
+          pendingPayments={pendingPayments}
+          onPendingPaymentsChange={setPendingPayments}
+          computedTotal={totals.total}
           onInvoiceUpdated={(updated) => {
             // A payment only moves balance / status / version in the DB —
             // take just those three into the form state so unsaved header
@@ -771,7 +812,16 @@ export default function TicketForm({
         )}
         {initial && onDuplicate && <button className="btn secondary" type="button" onClick={onDuplicate}>Duplicate</button>}
         {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
-        <button className="btn secondary" type="button" onClick={onCancel}>Close</button>
+        <button
+          className="btn secondary" type="button"
+          onClick={() => {
+            // A staged payment only exists in this form until Save — closing
+            // now would lose it. Ask once; field edits close silently as
+            // before (the View button already warns about unsaved changes).
+            if (pendingPayments.length && !window.confirm('You have a payment staged on this invoice that has not been saved yet. Close without saving it?')) return
+            onCancel()
+          }}
+        >Close</button>
       </div>
       {initial && onDelete && (
         <div className="danger-zone">

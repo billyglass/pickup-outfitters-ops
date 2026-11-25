@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { store } from '../lib/store.js'
-import { fmtDate, money, roundCents, todayStr, isCodTicket } from '../lib/tickets.js'
+import { fmtDate, money, roundCents, todayStr, isCodTicket, invoicePaymentSummary } from '../lib/tickets.js'
 
 // Payments on an invoice (Phase 3, payments piece). A deposit is just a
 // payment: COD accounts need one when product is ordered, terms accounts
@@ -15,7 +15,7 @@ import { fmtDate, money, roundCents, todayStr, isCodTicket } from '../lib/ticket
 const METHODS = ['Cash', 'Check', 'Card', 'Other']
 const RECORDABLE = ['Draft', 'Issued', 'Partially Paid']
 
-export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, onInvoiceUpdated }) {
+export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, onInvoiceUpdated, pendingPayments, onPendingPaymentsChange, computedTotal }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -33,10 +33,18 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
   const [savedMsg, setSavedMsg] = useState('')
 
   const invoiceId = invoice?.id
-  const total = roundCents(Number(invoice?.total) || 0)
-  const paid = roundCents(payments.reduce((s, p) => s + (Number(p.amount) || 0), 0))
-  const balance = roundCents(total - paid)
-  const canRecord = !readOnly && RECORDABLE.includes(invoice?.status)
+  // A new invoice has no saved total yet — the form's live computed total
+  // is what the balance is measured against until it is saved. A saved
+  // invoice always uses its saved total, even if the lines were edited
+  // since (the DB derives the balance from the saved total too).
+  const total = roundCents(Number(invoiceId ? (invoice?.total ?? 0) : (computedTotal ?? invoice?.total ?? 0)) || 0)
+  const summary = invoicePaymentSummary(total, payments, pendingPayments)
+  const paid = summary.paid
+  const balance = summary.balance
+  // A new invoice can always take a payment — it is staged in the form
+  // until Save (see doRecord). A saved invoice follows the same
+  // recordable statuses as before.
+  const canRecord = !readOnly && (!invoiceId || RECORDABLE.includes(invoice?.status))
   // Deposit due: COD terms (or a walk-in — cash on the spot) with no
   // payment recorded yet, on a Draft or Issued invoice. A reminder only —
   // it never blocks saving. Terms accounts never show it.
@@ -60,6 +68,25 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
 
   async function doRecord(amountToRecord) {
     setError('')
+    // New invoice (Nov 25): no id exists yet, so there is no payment row
+    // to write. Stage it in the form instead — TicketForm writes staged
+    // payments right after the invoice itself is saved, in the same pass.
+    if (!invoiceId) {
+      onPendingPaymentsChange?.([...(pendingPayments || []), {
+        key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        amount: amountToRecord,
+        payment_date: payDate || todayStr(),
+        method,
+        reference: (reference || '').trim() || null,
+        note: (note || '').trim() || null,
+      }])
+      setAmount('')
+      setReference('')
+      setNote('')
+      setConfirmOverpay(null)
+      setSavedMsg('Payment staged — it will be saved with this invoice when you hit Save.')
+      return
+    }
     setBusy(true)
     try {
       const { payment, invoice: updated } = await store.recordPayment(invoiceId, {
@@ -83,12 +110,45 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
     }
   }
 
+  // A staged payment that could not be written when the invoice was saved
+  // (rare — the invoice saved but the payment insert failed). It stays in
+  // the form with a Retry; the invoice exists now, so retry is the live path.
+  async function retryPending(p) {
+    setError('')
+    setBusy(true)
+    try {
+      const { payment, invoice: updated } = await store.recordPayment(invoiceId, {
+        amount: p.amount,
+        payment_date: p.payment_date,
+        method: p.method,
+        reference: p.reference,
+        note: p.note,
+      }, userId)
+      setPayments((ps) => [payment, ...ps])
+      onPendingPaymentsChange?.((pendingPayments || []).filter((x) => x.key !== p.key))
+      setSavedMsg(`Payment of $${money(p.amount)} recorded and saved on ${invoice?.number || 'this invoice'}.`)
+      if (updated && onInvoiceUpdated) onInvoiceUpdated(updated)
+    } catch (err) {
+      setError(err.message || 'Could not record payment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function removePending(key) {
+    onPendingPaymentsChange?.((pendingPayments || []).filter((p) => p.key !== key))
+    setSavedMsg('')
+  }
+
   function record() {
     const amt = roundCents(Number(amount) || 0)
     if (!(amt > 0)) { setError('Enter a payment amount greater than $0.'); return }
     // Overpayment guard: more than the balance due is allowed (credit
-    // balances are real), but say so with the numbers and ask once.
-    if (amt > balance) {
+    // balances are real), but say so with the numbers and ask once. Only
+    // on a saved invoice — while writing a new one the total is still
+    // provisional (lines not finished), so the warning would be noise;
+    // the staged row and the balance shown are the check there.
+    if (invoiceId && amt > balance) {
       setConfirmOverpay({ amount: amt, over: roundCents(amt - balance) })
       return
     }
@@ -108,17 +168,6 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
     }
   }
 
-  // Brand-new / duplicated invoice — nothing to pay against until it is
-  // saved and has a number.
-  if (!invoiceId) {
-    return (
-      <section className="ticket-section">
-        <h3>Payments</h3>
-        <p className="muted">Save the invoice first, then record payments.</p>
-      </section>
-    )
-  }
-
   return (
     <section className="ticket-section">
       <h3>Payments</h3>
@@ -128,6 +177,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
       <p style={{ marginTop: 0 }}>
         <strong>Paid so far:</strong> ${money(paid)} · <strong>Balance due:</strong> ${money(balance)}
         {balance < 0 && <span className="muted"> (overpaid by ${money(-balance)})</span>}
+        {summary.pendingCount > 0 && <span className="muted"> (includes ${money(summary.pendingTotal)} staged)</span>}
       </p>
       {error && <div className="error">{error}</div>}
       {savedMsg && <p className="saved-ok" style={{ marginTop: 0 }}>{savedMsg}</p>}
@@ -154,6 +204,27 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
             </div>
           </div>
         ))
+      )}
+      {summary.pendingCount > 0 && (
+        <div style={{ borderTop: '1px solid #eee', padding: '10px 0' }}>
+          <p className="muted" style={{ margin: '0 0 6px' }}>
+            {invoiceId
+              ? 'These payments could not be saved with the invoice — retry them below.'
+              : 'Staged payments — saved with this invoice when you hit Save:'}
+          </p>
+          {pendingPayments.map((p) => (
+            <div key={p.key} style={{ padding: '4px 0' }}>
+              <div className="row-between">
+                <span><strong>{fmtDate(p.payment_date)}</strong> · ${money(p.amount)} · {p.method || '—'}{p.reference ? ` · #${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}</span>
+                {invoiceId ? (
+                  <button className="btn small" type="button" disabled={busy} onClick={() => retryPending(p)}>Retry</button>
+                ) : (
+                  <button className="btn secondary small" type="button" onClick={() => removePending(p.key)}>Remove</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
       {canRecord && (
         <>
@@ -206,7 +277,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
             </div>
           ) : (
             <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" type="button" disabled={busy || !(Number(amount) > 0)} onClick={record}>{busy ? 'Recording…' : 'Record payment'}</button>
+              <button className="btn" type="button" disabled={busy || !(Number(amount) > 0)} onClick={record}>{busy ? 'Recording…' : !invoiceId ? 'Stage payment' : 'Record payment'}</button>
             </div>
           )}
         </>
