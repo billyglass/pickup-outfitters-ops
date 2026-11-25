@@ -272,7 +272,10 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         <h2 style={{ margin: 0 }}>Invoices — Open ({open.length}){isAdmin ? <> · ${money(openValue)}</> : ''} · Overdue ({overdue.length})</h2>
         <button className="btn" onClick={() => setEditing(null)}>+ New invoice</button>
       </div>
-      <p className="muted small">Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments: open an invoice and use the Payments section — deposits and partial payments, as many as the customer makes; the balance and status update on their own, and deleting a payment is Admin-only. Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      <details className="muted small">
+        <summary>How invoices work</summary>
+        <p>Numbers are assigned atomically on save from the invoice sequence (INV-1001…), separate from quotes (QT-A1001…). Voiding keeps the record, its number, and its history — numbers are never reused and other records are never renumbered. Admin can rename an invoice from inside its edit form (the old number stays searchable) or delete any invoice from there — deleting one invoice never changes any other invoice's number. Payments: open an invoice and use the Payments section — deposits and partial payments, as many as the customer makes; the balance and status update on their own, and deleting a payment is Admin-only. Duplicate opens a new Draft with everything copied — change the vehicle / VIN for the next fleet unit, then Save.</p>
+      </details>
       {msg && <div className="success">{msg}</div>}
       {voiding && (
         <div className="card" style={{ border: '2px solid #b3261e' }}>
@@ -327,6 +330,9 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             const vin = vf.vin || '—'
             const bedSize = vf.bed_size || ''
             const color = vf.color || ''
+            // No vehicle at all on the ticket: one dash, not a dash plus a
+            // "VIN —" line underneath it (Nov 25 cleanup).
+            const hasVehicle = ymm !== '—' || vin !== '—' || bedSize !== '' || color !== ''
             const overdue = isOverdue(inv)
             const depositDue = ['Draft', 'Issued', 'Billed'].includes(inv.status) && isCodTicket(inv) && !paidInvoiceIds.has(inv.id)
             // Complete & bill (Nov 25): a Draft invoice for a fleet/terms
@@ -337,7 +343,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
               <tr key={inv.id}>
                 <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
                 <td className="customer" title={customerOf(inv)}>{customerOf(inv)}{isWalkInTicket(inv) && <div className="muted small">Walk-in</div>}</td>
-                <td className="vehicle">{ymm}{bedSize ? ` · ${bedSize}` : ''}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></td>
+                <td className="vehicle">{hasVehicle ? <>{ymm}{bedSize ? ` · ${bedSize}` : ''}{color ? ` · ${color}` : ''}<div className="muted small sub">VIN {vin}</div></> : '—'}</td>
                 <td className="nowrap">{fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))}</td>
                 {/* Due date is Admin-only (Nov 24): Sales see the created /
                     issued date and the Overdue count in the header, not a
@@ -357,8 +363,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     <button className="btn secondary small" onClick={() => setEditing(inv)}>Edit</button>
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
-                    {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => completeAndBill ? issue(inv, { openPrint: true }) : issue(inv)}>{completeAndBill ? 'Complete & bill' : 'Issue'}</button>}
-                    {['Issued', 'Partially Paid'].includes(inv.status) && completeAndBill && <button className="btn secondary small" disabled={busy === `bill-${inv.id}`} onClick={() => bill(inv)}>Complete &amp; bill</button>}
+                    {inv.status === 'Draft' && <button className="btn secondary small" style={{ whiteSpace: 'nowrap' }} disabled={busy === inv.id} onClick={() => completeAndBill ? issue(inv, { openPrint: true }) : issue(inv)}>{completeAndBill ? 'Complete & bill' : 'Issue'}</button>}
+                    {['Issued', 'Partially Paid'].includes(inv.status) && completeAndBill && <button className="btn secondary small" style={{ whiteSpace: 'nowrap' }} disabled={busy === `bill-${inv.id}`} onClick={() => bill(inv)}>Complete &amp; bill</button>}
                     {isAdmin && ['Issued', 'Billed', 'Partially Paid', 'Paid'].includes(inv.status) && (
                       <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}
