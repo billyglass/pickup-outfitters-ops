@@ -62,13 +62,19 @@ export function cashCollectedOn(payments, date) {
 }
 
 // Match an invoice by its number or any previous number (renumbered
-// invoices stay findable). Trimmed, case-insensitive.
+// invoices stay findable). Trimmed, case-insensitive, and the "INV-"
+// prefix is optional — typing just the number (1002) finds INV-1002,
+// the way Bill asked Nov 25. Previous numbers normalize the same way,
+// so a bare old number (105) still finds its invoice.
+function normInvoiceNumber(s) {
+  return String(s || '').trim().toLowerCase().replace(/^inv-?/, '')
+}
 export function findInvoiceByNumber(invoices, text) {
-  const q = String(text || '').trim().toLowerCase()
+  const q = normInvoiceNumber(text)
   if (!q) return null
   return (invoices || []).find((inv) => {
-    if (String(inv.number || '').trim().toLowerCase() === q) return true
-    return (inv.previous_numbers || []).some((n) => String(n || '').trim().toLowerCase() === q)
+    if (normInvoiceNumber(inv.number) === q) return true
+    return (inv.previous_numbers || []).some((n) => normInvoiceNumber(n) === q)
   }) || null
 }
 
@@ -116,4 +122,53 @@ export function collectedTotals(rows) {
     missingCost: (rows || []).length - costed.length,
     rowCount: (rows || []).length,
   }
+}
+
+// Past days (Nov 25): one summary per date with any activity — a payment
+// collected or an invoice billed that day — newest first, capped at the
+// most recent 60 such days so the list never runs away. This is how Bill
+// checks historically whether a day (e.g. New Year's Eve) was worth
+// being open: pick the date and the sheet above loads it. Money figures
+// follow the same rules as the sold square (profit only across costed
+// invoices); a payment on a since-deleted invoice still counts toward
+// that day's cash, because the money was still collected.
+export function dayHistory(payments, invoices, linesByInvoice, taxRate, costOf) {
+  const byDate = new Map()
+  const ensure = (d) => {
+    if (!byDate.has(d)) byDate.set(d, { date: d, collectedIds: new Set(), cash: 0, billed: [] })
+    return byDate.get(d)
+  }
+  for (const p of payments || []) {
+    const d = String(p.payment_date || '').slice(0, 10)
+    if (!d) continue
+    const e = ensure(d)
+    if (p.invoice_id) e.collectedIds.add(p.invoice_id)
+    e.cash = roundCents(e.cash + (Number(p.amount) || 0))
+  }
+  for (const inv of invoices || []) {
+    if (inv.status === 'Void') continue
+    const d = String(inv.issue_date || '').slice(0, 10)
+    if (!d) continue
+    const e = ensure(d)
+    const lines = linesByInvoice && typeof linesByInvoice.get === 'function' ? linesByInvoice.get(inv.id) : undefined
+    const figs = invoiceSaleFigures(inv, lines, taxRate)
+    e.billed.push({ sale: figs.sale, cost: costOf(inv) })
+  }
+  return [...byDate.values()]
+    .map((e) => {
+      const s = soldSummary(e.billed)
+      return {
+        date: e.date,
+        collectedCount: e.collectedIds.size,
+        cash: e.cash,
+        billedCount: s.count,
+        totalSold: s.totalSold,
+        totalCost: s.totalCost,
+        profit: s.profit,
+        pct: s.pct,
+        costedCount: s.costedCount,
+      }
+    })
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 60)
 }

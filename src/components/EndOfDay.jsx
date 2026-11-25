@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate, money, roundCents, ticketCustomerName, salespersonNamesOf } from '../lib/tickets.js'
-import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals } from '../lib/endOfDay.js'
+import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory } from '../lib/endOfDay.js'
 
 // End of day (Nov 25) — Bill's spreadsheet, in the app. Two parts:
 //   1. Collected today: one row per invoice with money collected on the
@@ -149,6 +149,12 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.invoices, date, linesByInvoice, data.settings, costOverrides])
 
+  // Past days: every date with anything collected or billed, newest
+  // first — pick one to load that day's sheet above.
+  const history = useMemo(() => dayHistory(payments, data.invoices || [], linesByInvoice, data.settings?.tax_rate, costOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [payments, data.invoices, linesByInvoice, data.settings, costOverrides])
+
   function changeDate(d) {
     setDate(d)
     setAddedIds([])
@@ -252,7 +258,7 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
           value={addText}
           onChange={(e) => { setAddText(e.target.value); setAddMsg('') }}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInvoice() } }}
-          placeholder="Add an invoice by number, e.g. INV-1009"
+          placeholder="Add an invoice by number, e.g. 1009"
           aria-label="Add an invoice by number"
           style={{ minWidth: 260 }}
         />
@@ -280,6 +286,42 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
         </>
       ) : (
         <p>{sold.count} invoice{sold.count === 1 ? '' : 's'} billed on {fmtDate(date)}.</p>
+      )}
+    </div>
+    <div className="card">
+      <div className="row-between">
+        <h2 style={{ margin: 0 }}>Past days</h2>
+      </div>
+      <p className="muted small">Every day with anything collected or billed — pick a date to load that day&apos;s sheet above. Good for checking historically whether a day like New Year&apos;s Eve was worth being open.</p>
+      {payLoading ? (
+        <p className="muted">Loading payments…</p>
+      ) : history.length === 0 ? (
+        <p className="muted">No history yet — days show up here once something is collected or billed.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="list">
+            <thead><tr><th className="nowrap">Date</th><th className="num">Collected</th><th className="num">Billed</th>{isAdmin && <><th className="num">Cash</th><th className="num">Sold</th><th className="num">Profit</th><th className="num">%</th></>}</tr></thead>
+            <tbody>
+              {history.map((d) => (
+                <tr key={d.date}>
+                  <td className="nowrap">
+                    <button type="button" onClick={() => changeDate(d.date)} style={{ ...linkStyle, fontWeight: d.date === date ? 700 : 400 }}>{fmtDate(d.date)}</button>
+                  </td>
+                  <td className="num">{d.collectedCount} invoice{d.collectedCount === 1 ? '' : 's'}</td>
+                  <td className="num">{d.billedCount} invoice{d.billedCount === 1 ? '' : 's'}</td>
+                  {isAdmin && (
+                    <>
+                      <td className="num">${money(d.cash)}</td>
+                      <td className="num">${money(d.totalSold)}</td>
+                      <td className="num">{d.profit == null ? '—' : `$${money(d.profit)}`}</td>
+                      <td className="num">{d.pct == null ? '—' : `${(d.pct * 100).toFixed(1)}%`}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
     </>
