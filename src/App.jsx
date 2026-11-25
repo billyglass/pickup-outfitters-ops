@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates, todayStr } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
 import Login, { SetPassword } from './components/Login.jsx'
@@ -107,7 +107,13 @@ export default function App() {
     setLoading(true)
     setError('')
     try {
-      setData(await store.load())
+      const d = await store.load()
+      setData(d)
+      // Returned so a caller can use the fresh data immediately — the
+      // state update above only lands on the next render, so a handler
+      // that reloads and then acts on the data (the search re-run after
+      // billing) would otherwise read the stale closure copy.
+      return d
     } catch (err) {
       setError(err.message || 'Failed to load data.')
     } finally {
@@ -257,6 +263,44 @@ export default function App() {
   async function runSearch(e) {
     e?.preventDefault()
     await runSearchFor(searchQuery)
+  }
+
+  // Complete & bill from a search result row (Nov 25): the same two
+  // actions as the Invoices list, so Bill can search an invoice and
+  // complete it without going to the Invoices tab first. A Draft issues
+  // with no confirm; an already-Open (Issued / Partially Paid) invoice
+  // bills with the exact same confirm wording and date math as
+  // Invoices.jsx bill(). After billing, the data reloads and the search
+  // re-runs against the fresh data (not the stale closure copy) so the
+  // row shows its new status and the button goes away, then the billed
+  // invoice's print view opens — closing it returns to the Search tab
+  // via the returnTab mechanism, same as View.
+  const [searchBillBusy, setSearchBillBusy] = useState('')
+  async function searchIssue(ticket) {
+    setSearchBillBusy(ticket.id)
+    try {
+      const updated = await store.setTicketStatus('invoice', ticket, 'Billed', user?.id)
+      const fresh = await loadData()
+      if (fresh) setSearchResults(await globalSearch(searchQuery, fresh, searchFilters))
+      if (updated) openTicket('invoice', updated.id, 'view')
+    } catch (err) { setError(err.message || 'Issue failed.') } finally { setSearchBillBusy('') }
+  }
+  async function searchBill(ticket) {
+    const dates = invoiceBillingDates(ticket.payment_terms)
+    const alreadyBilled = ticket.issue_date
+      ? `This invoice was already billed on ${fmtDate(ticket.issue_date)}. Billing it again will move the billing date to today and the due date to ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
+      : `The billing date becomes today (${fmtDate(todayStr())}) and the due date becomes ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
+    const statusNote = ticket.status === 'Issued'
+      ? 'The status becomes Billed.'
+      : 'The status stays Partially Paid.'
+    if (!window.confirm(`Bill invoice ${ticket.number} now? ${alreadyBilled}. ${statusNote}`)) return
+    setSearchBillBusy(`bill-${ticket.id}`)
+    try {
+      const updated = await store.billInvoice(ticket, user?.id)
+      const fresh = await loadData()
+      if (fresh) setSearchResults(await globalSearch(searchQuery, fresh, searchFilters))
+      if (updated) openTicket('invoice', updated.id, 'view')
+    } catch (err) { setError(err.message || 'Billing failed.') } finally { setSearchBillBusy('') }
   }
 
   // Dashboard search suggestions: customers matching what was typed,
@@ -606,7 +650,12 @@ export default function App() {
                   <strong>${money(r.ticket.total)}</strong>
                   <span>
                     <button className="btn small" onClick={() => openTicket(r.type, r.ticket.id, 'view')}>View</button>{' '}
-                    <button className="btn secondary small" onClick={() => openTicket(r.type, r.ticket.id, 'edit')}>Edit</button>
+                    <button className="btn secondary small" onClick={() => openTicket(r.type, r.ticket.id, 'edit')}>Edit</button>{' '}
+                    {r.type === 'invoice' && canCompleteAndBill(r.ticket, data.customers.find((c) => c.id === r.ticket.customer_id)) && (
+                      r.ticket.status === 'Draft'
+                        ? <button className="btn secondary small" style={{ whiteSpace: 'nowrap' }} disabled={searchBillBusy === r.ticket.id} onClick={() => searchIssue(r.ticket)}>Complete &amp; bill</button>
+                        : <button className="btn secondary small" style={{ whiteSpace: 'nowrap' }} disabled={searchBillBusy === `bill-${r.ticket.id}`} onClick={() => searchBill(r.ticket)}>Complete &amp; bill</button>
+                    )}
                   </span>
                 </div>
               </div>
