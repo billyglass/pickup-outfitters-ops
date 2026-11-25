@@ -280,22 +280,28 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
               />
             </div>
           </div>
-          {canRecord && balance > 0 && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
-              <input type="checkbox" checked={pifChecked} onChange={togglePif} />
-              Paid in full — fill the remaining balance (${money(balance)})
-            </label>
-          )}
-          {confirmOverpay ? (
+          {/* Paid in full and the Record button share one row (Nov 25):
+              checkbox on the left, the button over on the right and a tad
+              bigger, instead of the button sitting on its own row. */}
+          <div className="row-between" style={{ marginTop: 12 }}>
+            {canRecord && balance > 0 ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={pifChecked} onChange={togglePif} />
+                Paid in full — fill the remaining balance (${money(balance)})
+              </label>
+            ) : (
+              <span />
+            )}
+            {!confirmOverpay && (
+              <button className="btn" type="button" style={{ padding: '12px 22px', fontSize: 15 }} disabled={busy || !(Number(amount) > 0)} onClick={record}>{busy ? 'Recording…' : !invoiceId ? 'Stage payment' : 'Record payment'}</button>
+            )}
+          </div>
+          {confirmOverpay && (
             <div className="warn" style={{ marginTop: 12 }}>
               This is ${money(confirmOverpay.over)} more than the balance due of ${money(balance)}.
               The balance will show as overpaid.{' '}
               <button className="btn small" type="button" disabled={busy} onClick={() => doRecord(confirmOverpay.amount)}>{busy ? 'Recording…' : 'Record it anyway'}</button>{' '}
               <button className="btn secondary small" type="button" onClick={() => setConfirmOverpay(null)}>Cancel</button>
-            </div>
-          ) : (
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" type="button" disabled={busy || !(Number(amount) > 0)} onClick={record}>{busy ? 'Recording…' : !invoiceId ? 'Stage payment' : 'Record payment'}</button>
             </div>
           )}
         </>
