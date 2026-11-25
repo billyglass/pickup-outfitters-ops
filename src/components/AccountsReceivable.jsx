@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { fmtDate, money, ticketCustomerName, customerTypeOf } from '../lib/tickets.js'
+import { fmtDate, money, ticketCustomerName, customerTypeOf, displayInvoiceStatus } from '../lib/tickets.js'
 import { agingBucket, agingBucketLabel, agingSummary, daysPastDue, isAgingInvoice, AGING_BUCKETS } from '../lib/arAging.js'
 import ComboBox from './ComboBox.jsx'
 
@@ -11,13 +11,22 @@ import ComboBox from './ComboBox.jsx'
 // so summed dollars are allowed here; Sales never sees this tab.
 // Deliberately NOT built here: payment allocations across invoices,
 // customer statements, credit/refund workflows, and export — those are
-// separate follow-ups.
+// separate follow-ups. A second list below the aging table shows what was
+// billed today (Nov 25): an invoice counts when its billing date
+// (issue_date) is today — Complete & bill hit, or a Draft issued —
+// whatever its status now (a job billed and paid in full today still
+// counts as pushed through today). Void is excluded; Drafts never qualify
+// because they have no billing date yet.
 export default function AccountsReceivable({ data, today, onOpenInvoice }) {
   const [bucket, setBucket] = useState('')
   const [fCustomer, setFCustomer] = useState('')
 
   const aging = useMemo(() => (data.invoices || []).filter(isAgingInvoice), [data.invoices])
   const summary = useMemo(() => agingSummary(data.invoices || [], today), [data.invoices, today])
+  const billedToday = useMemo(() => (data.invoices || [])
+    .filter((inv) => inv.status !== 'Void' && String(inv.issue_date || '').slice(0, 10) === today)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))), [data.invoices, today])
+  const billedTodayTotal = useMemo(() => billedToday.reduce((s, inv) => s + (Number(inv.total) || 0), 0), [billedToday])
 
   const filtered = useMemo(() => {
     const rows = aging.filter((inv) => {
@@ -41,6 +50,7 @@ export default function AccountsReceivable({ data, today, onOpenInvoice }) {
   const linkStyle = { background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }
 
   return (
+    <>
     <div className="card">
       <div className="row-between">
         <h2 style={{ margin: 0 }}>Accounts receivable — {filtered.length}{filtered.length !== aging.length ? ` of ${aging.length}` : ''} invoices</h2>
@@ -104,5 +114,35 @@ export default function AccountsReceivable({ data, today, onOpenInvoice }) {
         </div>
       )}
     </div>
+    <div className="card">
+      <div className="row-between">
+        <h2 style={{ margin: 0 }}>Billed today ({billedToday.length}) · ${money(billedTodayTotal)} billed</h2>
+      </div>
+      <p className="muted small">Invoices billed today — Complete &amp; bill hit, or a Draft issued — newest first. Click an invoice number to open that invoice.</p>
+      {billedToday.length === 0 ? (
+        <p className="muted">Nothing billed yet today.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="list wide">
+            <thead><tr><th className="nowrap">Invoice</th><th>Customer</th><th>Status</th><th className="num">Total</th><th className="num">Balance due</th><th className="nowrap">Due</th></tr></thead>
+            <tbody>
+              {billedToday.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="nowrap">
+                    <button type="button" onClick={() => onOpenInvoice && onOpenInvoice(inv)} style={linkStyle}>{inv.number}</button>
+                  </td>
+                  <td>{ticketCustomerName(inv, data.customers)}</td>
+                  <td>{inv.status === 'Paid' ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>Paid</span> : displayInvoiceStatus(inv.status)}</td>
+                  <td className="num">${money(inv.total)}</td>
+                  <td className="num">{inv.status === 'Paid' && Number(inv.balance_due ?? inv.total ?? 0) === 0 ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>PIF</span> : `$${money(inv.balance_due ?? inv.total ?? 0)}`}</td>
+                  <td className="nowrap">{fmtDate(inv.due_date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+    </>
   )
 }
