@@ -9,7 +9,7 @@ import {
   customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin, vehicleAutofillResult,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
-  canEditTicket, salespersonNamesOf, canEditSalespeople, displayInvoiceStatus,
+  canEditTicket, salespersonNamesOf, canEditSalespeople, displayInvoiceStatus, canCompleteAndBill,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -18,7 +18,7 @@ const TAX_RATE = 0.0774
 export default function TicketForm({
   kind, initial, lines: initialLines, customers, vehicles, contacts, addresses,
   products, profiles, user, profile, isAdmin, settings, onSaved, onCancel, onView,
-  prefill, onDuplicate, onConvert, onDelete, onRenumbered, onTicketChanged,
+  prefill, onDuplicate, onConvert, onCompleteAndBill, completeAndBillBusy, onDelete, onRenumbered, onTicketChanged,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // Admin renumber (invoices only, existing invoice only): a separate
@@ -812,6 +812,13 @@ export default function TicketForm({
         )}
         {initial && onDuplicate && <button className="btn secondary" type="button" onClick={onDuplicate}>Duplicate</button>}
         {initial && onConvert && <button className="btn" type="button" onClick={onConvert}>Convert to invoice</button>}
+        {/* Complete & bill (Nov 25): fleet/terms only. Visibility follows
+            the CURRENT form customer/terms — picking a different customer
+            can show or hide it — not just the saved values. The action
+            itself converts the saved quote (same caveat as Convert). */}
+        {initial && onCompleteAndBill && canCompleteAndBill(ticket, customers.find((c) => c.id === ticket.customer_id)) && (
+          <button className="btn" type="button" disabled={completeAndBillBusy} onClick={onCompleteAndBill}>Complete &amp; bill</button>
+        )}
         <button
           className="btn secondary" type="button"
           onClick={() => {

@@ -716,6 +716,17 @@ export function customerTypeOf(customer) {
   return customer?.customer_type === 'Fleet' ? 'Fleet' : 'Retail'
 }
 
+// "Complete & bill" (Nov 25): a fleet/terms job is done and the customer
+// can be billed. Shown only on Open, unconverted quotes for a fleet
+// customer or a terms account — walk-ins are COD with no customer, so
+// they never see it; a Retail customer on Net 30 does (a terms account).
+// customer is the linked customer record (null/undefined for a walk-in).
+export function canCompleteAndBill(quote, customer) {
+  if (!quote || quote.status !== 'Open' || quote.converted_invoice_id) return false
+  if (customer && customer.customer_type === 'Fleet') return true
+  return !isCodTicket(quote)
+}
+
 // Find an existing customer by a walk-in's phone (digits only) or email
 // (case-insensitive) — used by "Save walk-in as customer" so a repeat
 // buyer is linked to their existing record instead of creating a duplicate.

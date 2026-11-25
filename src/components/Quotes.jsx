@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, canEditTicket, salespersonNamesOf, money } from '../lib/tickets.js'
+import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, canEditTicket, salespersonNamesOf, money, canCompleteAndBill } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -124,6 +124,49 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
     } catch (err) { onError(err.message || 'Conversion failed.') } finally { setBusy('') }
   }
 
+  // Complete & bill (Nov 25): the fleet job is done — convert the quote
+  // AND issue the invoice in one step, so the customer can be billed.
+  // The completion marker IS the conversion: the quote leaves the Open
+  // list and the invoice is Issued, billing date today, due date from the
+  // terms on the quote (setTicketStatus stamps both). No job-status field
+  // is added — the paper holder still tracks the vehicle/job. After it
+  // succeeds, the issued invoice's print view opens, ready to print and
+  // send; closing it returns to the Quotes tab.
+  async function completeAndBill(q, opts = {}) {
+    if (q.converted_invoice_id) {
+      const existing = convertedInvoiceOf(q)
+      setConvertedInvoice(existing ? { id: existing.id, number: existing.number } : null)
+      setConvertMsg(`This quote was already converted${existing ? ` to invoice ${existing.number}` : ''}.`)
+      return
+    }
+    if (q.status !== 'Open') return
+    if (!window.confirm(`Mark quote ${q.number} complete and bill it? This converts it to an invoice AND issues it right away — billing date today, due date from the terms on the quote. The quote leaves the Open list and the issued invoice opens, ready to print and send.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    setBusy(`bill-${q.id}`)
+    setConvertMsg('')
+    setConvertedInvoice(null)
+    try {
+      const invoice = await store.convertQuoteToInvoice(q, linesOf(q.id), user?.id, data)
+      let issued
+      try {
+        issued = await store.setTicketStatus('invoice', invoice, 'Issued', user?.id)
+      } catch (issueErr) {
+        // The invoice exists as a Draft — say so plainly and do NOT claim
+        // the job was billed. The message + Open invoice button point at
+        // the Draft so it can be issued from the Invoices list.
+        setConvertedInvoice({ id: invoice.id, number: invoice.number })
+        setConvertMsg(`Converted to invoice ${invoice.number}, but issuing it failed: ${issueErr.message || 'Issue failed.'} The invoice is a Draft — issue it from the Invoices list.`)
+        if (opts.fromForm) setEditing(undefined)
+        await onReload()
+        return
+      }
+      setConvertedInvoice({ id: issued.id, number: issued.number })
+      setConvertMsg(`Completed & billed — invoice ${issued.number} is issued and ready to print.`)
+      if (opts.fromForm) setEditing(undefined)
+      await onReload()
+      if (onOpenInvoice) onOpenInvoice(issued)
+    } catch (err) { onError(err.message || 'Complete & bill failed.') } finally { setBusy('') }
+  }
+
   async function handleDelete(q) {
     if (!isAdmin) return
     // The form already asks "Delete this quote?" before calling this,
@@ -191,6 +234,8 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         onView={editing ? () => setPrinting(editing) : undefined}
         onDuplicate={editing ? () => duplicate(editing) : undefined}
         onConvert={editing && canConvert(editing) ? () => convert(editing, { fromForm: true }) : undefined}
+        onCompleteAndBill={editing && canConvert(editing) ? () => completeAndBill(editing, { fromForm: true }) : undefined}
+        completeAndBillBusy={editing ? busy === `bill-${editing.id}` : false}
         onDelete={isAdmin && editing?.status === 'Open' ? () => handleDelete(editing) : undefined}
       />
     )
@@ -279,6 +324,9 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
                     {q.status === 'Lost' && <button className="btn secondary small" disabled={busy === q.id} onClick={() => setStatus(q, 'Open')}>Reopen</button>}
                     {canConvert(q) && (
                       <button className="btn small" disabled={busy === `convert-${q.id}`} onClick={() => convert(q)}>Convert to invoice</button>
+                    )}
+                    {canCompleteAndBill(q, data.customers.find((c) => c.id === q.customer_id)) && (
+                      <button className="btn small" disabled={busy === `bill-${q.id}`} onClick={() => completeAndBill(q)}>Complete &amp; bill</button>
                     )}
 
                   </div>
