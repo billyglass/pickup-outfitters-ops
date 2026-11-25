@@ -393,7 +393,7 @@ create table if not exists public.invoices (
   salesperson_ids uuid[] not null default '{}',
   created_by uuid references auth.users (id),
   status text not null default 'Draft'
-    check (status in ('Draft', 'Issued', 'Partially Paid', 'Paid', 'Void')),
+    check (status in ('Draft', 'Issued', 'Billed', 'Partially Paid', 'Paid', 'Void')),
   issue_date date,
   due_date date,
   po_number text,
@@ -1090,16 +1090,17 @@ drop policy if exists "invoice_lines delete admin" on public.invoice_lines;
 create policy "invoice_lines delete admin" on public.invoice_lines for delete
   using (public.is_admin());
 -- Any active user may delete a line whose parent invoice is Draft, Issued,
--- or Partially Paid (migration 020 widened this from Draft-only so Sales
--- can remove a line when a customer changes their mind on a part). Paid
--- and Void invoices stay Admin-only for line deletes.
+-- Billed, or Partially Paid (migration 020 widened this from Draft-only so
+-- Sales can remove a line when a customer changes their mind on a part;
+-- migration 024 added Billed, which is editable like Issued). Paid and
+-- Void invoices stay Admin-only for line deletes.
 drop policy if exists "invoice_lines delete draft" on public.invoice_lines;
 create policy "invoice_lines delete draft" on public.invoice_lines for delete
   using (
     public.is_active_user()
     and exists (
       select 1 from public.invoices i
-      where i.id = invoice_lines.invoice_id and i.status in ('Draft', 'Issued', 'Partially Paid')
+      where i.id = invoice_lines.invoice_id and i.status in ('Draft', 'Issued', 'Billed', 'Partially Paid')
     )
   );
 

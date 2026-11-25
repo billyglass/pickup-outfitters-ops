@@ -156,7 +156,9 @@ export function dueDateFor(issueDate, terms) {
 //    due date are stamped later, by an explicit Complete & bill, so the
 //    terms clock runs from billing, not from creation (equipment wait time
 //    must not eat the terms).
-//  - Draft -> Issued: issue = today (the billing date); due = COD ? null : today+terms
+//  - Draft -> Billed (or Issued/Partially Paid via the payment derive
+//    when a Draft with payments is issued): issue = today (the billing
+//    date); due = COD ? null : today+terms
 //  - Draft saved as Draft: keep the saved issue_date; due = null
 //  - Issued (or later) edited: keep the saved issue_date and due_date,
 //    unless the terms changed — then due = COD ? null : saved issue_date + new terms
@@ -173,7 +175,7 @@ export function invoiceDatesOnSave({ isNew, currentStatus, currentIssueDate, cur
   if (isNew) {
     return { issue_date: null, due_date: null }
   }
-  if (currentStatus === 'Draft' && newStatus === 'Issued') {
+  if (currentStatus === 'Draft' && ['Issued', 'Billed', 'Partially Paid'].includes(newStatus)) {
     return { issue_date: today, due_date: dueFor(today, newTerms) }
   }
   if (newStatus === 'Draft') {
@@ -201,15 +203,22 @@ export function invoiceBillingDates(terms) {
 // balance = total - paid (negative = overpaid / credit). Status follows
 // ONLY for live invoices — Draft and Void are never touched by this logic:
 // total > 0 and paid >= total -> Paid; paid > 0 -> Partially Paid;
-// otherwise Issued. Pure function — the store layer (Supabase + local)
-// both use it, so the math can never drift between backends.
-export function deriveInvoiceBalance(total, paid, currentStatus) {
+// otherwise the invoice keeps its pre-payment state — Billed stays Billed
+// if it was billed, Issued stays Issued if it was not (Nov 25). The caller
+// passes `billed` — whether the invoice has a billing date (issue_date
+// set) or is already status Billed; it defaults to
+// currentStatus === 'Billed' when omitted. That matters when the last
+// payment is deleted: a Partially Paid invoice goes back to Billed if it
+// was billed, Issued if it was not. Pure function — the store layer
+// (Supabase + local) both use it, so the math can never drift between
+// backends.
+export function deriveInvoiceBalance(total, paid, currentStatus, billed = currentStatus === 'Billed') {
   const t = roundCents(Number(total) || 0)
   const p = roundCents(Number(paid) || 0)
   const balanceDue = roundCents(t - p)
   let status = currentStatus
-  if (['Issued', 'Partially Paid', 'Paid'].includes(currentStatus)) {
-    status = t > 0 && p >= t ? 'Paid' : p > 0 ? 'Partially Paid' : 'Issued'
+  if (['Issued', 'Billed', 'Partially Paid', 'Paid'].includes(currentStatus)) {
+    status = t > 0 && p >= t ? 'Paid' : p > 0 ? 'Partially Paid' : (billed ? 'Billed' : 'Issued')
   }
   return { paid: p, balanceDue, status }
 }
@@ -343,11 +352,11 @@ export function isOverdue(ticket, today = todayStr()) {
 
 // Can this user edit this ticket? The exact rules TicketForm enforces
 // (and the DB invoice_guard backs up): Sales edit Open quotes and Draft /
-// Issued / Partially Paid invoices. Lost quotes and converted quotes are
-// locked to Sales, as are Paid / Void / closed-period invoices. Admin may
-// correct any ticket except a Void one. Used by TicketForm itself and by
-// the print view, which only offers an Edit button when the ticket is
-// editable for the current user.
+// Issued / Billed / Partially Paid invoices. Lost quotes and converted
+// quotes are locked to Sales, as are Paid / Void / closed-period invoices.
+// Admin may correct any ticket except a Void one. Used by TicketForm
+// itself and by the print view, which only offers an Edit button when the
+// ticket is editable for the current user.
 export function canEditTicket(kind, ticket, isAdmin) {
   if (!ticket) return false
   if (kind === 'quote') {
@@ -382,8 +391,8 @@ export function salespersonNamesOf(ticket, profiles) {
 // Sales — Admin can change salespeople on any editable ticket (Void
 // stays locked via canEditTicket). This is a picker-level lock only:
 // it does NOT change canEditTicket or any other edit permission —
-// Sales can still edit other fields on Draft / Issued / Partially Paid
-// invoices exactly as today.
+// Sales can still edit other fields on Draft / Issued / Billed /
+// Partially Paid invoices exactly as today.
 export function canEditSalespeople(kind, ticket, isAdmin, isNew) {
   if (isAdmin) return true
   if (isNew) return true

@@ -315,11 +315,16 @@ export default function TicketForm({
       // Invoices only: a new invoice can be created straight to Issued, or
       // saved as a Draft; a Draft being edited can be issued on save or stay
       // a Draft. Quotes keep their status (Open on save). The store derives
-      // Issued -> Partially Paid / Paid from payments, and leaves Draft
-      // untouched, so an explicit 'Issued' here lands as Issued.
-      const targetStatus = !isQuote
+      // Billed / Issued -> Partially Paid / Paid from payments, and leaves
+      // Draft untouched, so an explicit 'Issued' here lands as Issued.
+      // Issuing a Draft bills it (Nov 25): the status becomes 'Billed',
+      // not 'Issued' — 'Issued' (shown as Open) is only for a
+      // created-but-unbilled invoice. A new invoice created straight to
+      // Issued keeps 'Issued'.
+      let targetStatus = !isQuote
         ? (requestedStatus || (!initial ? 'Issued' : ticket.status))
         : ticket.status
+      if (!isQuote && initial && initial.status === 'Draft' && requestedStatus === 'Issued') targetStatus = 'Billed'
       // Snapshots freeze once a ticket leaves its open state — for quotes
       // that is any status other than Open (Lost, or already converted to
       // an invoice and won); for invoices, any status other than Draft.
@@ -396,12 +401,12 @@ export default function TicketForm({
         }
       }
       // Complete & bill (Nov 25): a Draft invoice for a fleet/terms account
-      // saved with the Issue button opens the issued invoice's print view
+      // saved with the Issue button opens the billed invoice's print view
       // afterwards (same landing as the list-row button) instead of closing
       // to the list. Same label rule as the button above — the current form
       // customer/terms. The parent (Invoices) opens the print view from
       // the extra flag; any other save closes to the list as before.
-      const wasCompleteAndBill = !isQuote && initial && initial.status === 'Draft' && targetStatus === 'Issued' && canCompleteAndBill(ticket, customer)
+      const wasCompleteAndBill = !isQuote && initial && initial.status === 'Draft' && targetStatus === 'Billed' && canCompleteAndBill(ticket, customer)
       setTicket(saved)
       setStatus('saved')
       onSaved(saved, wasCompleteAndBill ? { openPrint: true } : undefined)

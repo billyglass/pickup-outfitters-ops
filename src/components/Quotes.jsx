@@ -127,7 +127,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   // Complete & bill (Nov 25): the fleet job is done — convert the quote
   // AND issue the invoice in one step, so the customer can be billed.
   // The completion marker IS the conversion: the quote leaves the Open
-  // list and the invoice is Issued, billing date today, due date from the
+  // list and the invoice is Billed, billing date today, due date from the
   // terms on the quote (setTicketStatus stamps both). No job-status field
   // is added — the paper holder still tracks the vehicle/job. After it
   // succeeds, the issued invoice's print view opens, ready to print and
@@ -148,7 +148,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       const invoice = await store.convertQuoteToInvoice(q, linesOf(q.id), user?.id, data)
       let issued
       try {
-        issued = await store.setTicketStatus('invoice', invoice, 'Issued', user?.id)
+        issued = await store.setTicketStatus('invoice', invoice, 'Billed', user?.id)
       } catch (issueErr) {
         // The invoice exists as a Draft — say so plainly and do NOT claim
         // the job was billed. The message + Open invoice button point at
@@ -160,7 +160,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
         return
       }
       setConvertedInvoice({ id: issued.id, number: issued.number })
-      setConvertMsg(`Completed & billed — invoice ${issued.number} is issued and ready to print.`)
+      setConvertMsg(`Completed & billed — invoice ${issued.number} is billed and ready to print.`)
       if (opts.fromForm) setEditing(undefined)
       await onReload()
       if (onOpenInvoice) onOpenInvoice(issued)

@@ -8,12 +8,12 @@ import { fmtDate, money, roundCents, todayStr, isCodTicket, invoicePaymentSummar
 // amount, no percentage. A customer may pay a deposit, come back and pay
 // a little more, then pay the rest, so an invoice takes as many partial
 // payments as they make. Each payment lowers the balance; the status
-// follows on its own (Issued -> Partially Paid -> Paid). Record is any
+// follows on its own (Issued / Billed -> Partially Paid -> Paid). Record is any
 // active user; deleting a payment is Admin-only, with a confirm.
 // Lives inside TicketForm's <form>, so every button is type="button" and
 // Enter in a field records the payment instead of saving the ticket.
 const METHODS = ['Cash', 'Check', 'Card', 'Other']
-const RECORDABLE = ['Draft', 'Issued', 'Partially Paid']
+const RECORDABLE = ['Draft', 'Issued', 'Billed', 'Partially Paid']
 
 export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, onInvoiceUpdated, pendingPayments, onPendingPaymentsChange, computedTotal }) {
   const [payments, setPayments] = useState([])
@@ -46,10 +46,10 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
   // recordable statuses as before.
   const canRecord = !readOnly && (!invoiceId || RECORDABLE.includes(invoice?.status))
   // Deposit due: COD terms (or a walk-in — cash on the spot) with no
-  // payment recorded yet, on a Draft or Issued invoice. A reminder only —
-  // it never blocks saving. Terms accounts never show it.
+  // payment recorded yet, on a Draft, Issued, or Billed invoice. A reminder
+  // only — it never blocks saving. Terms accounts never show it.
   const depositDue = invoiceId && isCodTicket(invoice) && payments.length === 0 &&
-    ['Draft', 'Issued'].includes(invoice?.status)
+    ['Draft', 'Issued', 'Billed'].includes(invoice?.status)
 
   async function load() {
     if (!invoiceId) { setLoading(false); return }

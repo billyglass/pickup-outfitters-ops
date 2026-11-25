@@ -472,11 +472,11 @@ export default function App() {
               <button type="button" className="stat" onClick={() => setTab('customers')} title="Open Customers"><span className="num">{data.customers.length}</span><span className="label">Customers</span></button>
               <button type="button" className="stat" onClick={() => setTab('vehicles')} title="Open Vehicles"><span className="num">{data.vehicles.length}</span><span className="label">Vehicles</span></button>
               <button type="button" className="stat" onClick={() => setTab('quotes')} title="Open Quotes"><span className="num">{data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).length}</span><span className="label">Open quotes</span></button>
-              <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).length}</span><span className="label">Open invoices</span></button>
+              <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">{data.invoices.filter((i) => ['Draft', 'Issued', 'Billed', 'Partially Paid'].includes(i.status)).length}</span><span className="label">Open invoices</span></button>
               {isAdmin && (
                 <>
                   <button type="button" className="stat" onClick={() => setTab('quotes')} title="Open Quotes"><span className="num">${money(data.quotes.filter((q) => q.status === 'Open' && !q.converted_invoice_id).reduce((s, q) => s + Number(q.total || 0), 0))}</span><span className="label">Open quote value</span></button>
-                  <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">${money(data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0))}</span><span className="label">Open invoice balance</span></button>
+                  <button type="button" className="stat" onClick={() => setTab('invoices')} title="Open Invoices"><span className="num">${money(data.invoices.filter((i) => ['Draft', 'Issued', 'Billed', 'Partially Paid'].includes(i.status)).reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0))}</span><span className="label">Open invoice balance</span></button>
                 </>
               )}
             </div>
@@ -544,7 +544,7 @@ export default function App() {
               </select>
               <select value={searchFilters.status} onChange={(e) => setSearchFilters({ ...searchFilters, status: e.target.value })}>
                 <option value="">Any status</option>
-                {['Open', 'Lost', 'Issued', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
+                {['Open', 'Lost', 'Issued', 'Billed', 'Partially Paid', 'Paid', 'Void'].map((s) => <option key={s}>{s}</option>)}
               </select>
               <ComboBox
                 value={searchFilters.customerId}

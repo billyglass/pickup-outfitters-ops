@@ -5,7 +5,7 @@
 import { addDays } from './tickets.js'
 import { normalizeMake } from './adminMetrics.js'
 
-const SOLD_STATUSES = ['Issued', 'Partially Paid', 'Paid']
+const SOLD_STATUSES = ['Issued', 'Billed', 'Partially Paid', 'Paid']
 
 // Open quotes whose follow-up date is today or earlier, most overdue first.
 export function followUpsDue(quotes, today) {
@@ -38,8 +38,8 @@ export function fmtUnits(n) {
 }
 
 // The 5 most-used catalog products by total units across invoice lines
-// on sold invoices (Issued / Partially Paid / Paid — Void and Draft
-// lines are not sales yet). Lines match a catalog product by part
+// on sold invoices (Issued / Billed / Partially Paid / Paid — Void and
+// Draft lines are not sales yet). Lines match a catalog product by part
 // number (trimmed, case-insensitive); lines with no catalog match group
 // by their description text.
 export function topProducts(invoices, invoiceLines, products) {

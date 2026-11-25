@@ -314,8 +314,8 @@ async function sbSyncLines(kind, parentId, lines) {
   }
   for (const id of existingIds) {
     if (!keepIds.has(id)) {
-      // Open-quote / Draft-, Issued-, or Partially-Paid-invoice parents
-      // for non-Admins — see migration 002 (delete policy for lines on
+      // Open-quote / Draft-, Issued-, Billed-, or Partially-Paid-invoice
+      // parents for non-Admins — see migration 002 (delete policy for lines on
       // editable tickets), migration 008 (Open quote status), and
       // migration 020 (Issued / Partially Paid invoices). Paid and Void
       // parents stay Admin-only. Admins may delete any line.
@@ -476,7 +476,11 @@ async function sbSaveTicket(kind, ticket, lines, userId) {
     header.issue_date = ticket.issue_date || null
     header.due_date = ticket.due_date || null
     // Balance and status follow the payments (Draft / Void untouched).
-    const derived = deriveInvoiceBalance(totals.total, paidSoFar, ticket.status)
+    // `billed` is whether the invoice already has a billing date: the
+    // form ticket carries the saved issue_date for an existing invoice
+    // (a new invoice has no id yet, so its form-initializer date must
+    // NOT count — creation is not billing).
+    const derived = deriveInvoiceBalance(totals.total, paidSoFar, ticket.status, ticket.status === 'Billed' || (ticket.id && !!ticket.issue_date))
     header.balance_due = derived.balanceDue
     header.status = derived.status
     header.quote_id = ticket.quote_id || null
@@ -563,17 +567,19 @@ async function sbSetTicketStatus(kind, ticket, status, userId, extra = {}) {
   const patch = { status, ...extra }
   if (kind === 'invoice' && status === 'Paid') patch.balance_due = 0
   // Issuing an invoice bills it out (Nov 23): the billing date is today
-  // and the due date runs from today — COD has no due date. Other status
-  // changes never touch the dates. An already-issued invoice keeps its
-  // saved dates (invoiceDatesOnSave handles that).
-  if (kind === 'invoice' && status === 'Issued') {
+  // and the due date runs from today — COD has no due date. The status
+  // becomes 'Billed' (Nov 25), not 'Issued': 'Issued' (shown as Open) is
+  // only for a created-but-unbilled invoice. Other status changes never
+  // touch the dates. An already-billed invoice keeps its saved dates
+  // (invoiceDatesOnSave handles that).
+  if (kind === 'invoice' && status === 'Billed') {
     const dates = invoiceDatesOnSave({
       isNew: false,
       currentStatus: current.status,
       currentIssueDate: current.issue_date,
       currentDueDate: current.due_date,
       currentTerms: current.payment_terms,
-      newStatus: 'Issued',
+      newStatus: 'Billed',
       newTerms: current.payment_terms,
     })
     patch.issue_date = dates.issue_date
@@ -586,14 +592,14 @@ async function sbSetTicketStatus(kind, ticket, status, userId, extra = {}) {
 }
 
 // Bill an already-Open invoice (Nov 25): the BILLING moment — re-stamp
-// the billing date to today and the due date from the terms. Updates ONLY
-// the dates; the status never changes (a Partially Paid invoice stays
-// Partially Paid), which is why this is NOT setTicketStatus('Issued') —
-// that would reset the status and the billing clock. Only an Issued or
-// Partially Paid invoice can be billed this way; Drafts are issued, Paid
-// and Void are never re-billed. Follows the sbSetTicketStatus pattern:
-// read the current row, update with a version check (the DB trigger bumps
-// version on save).
+// the billing date to today and the due date from the terms. An unbilled
+// Open invoice becomes 'Billed' — the visible change Bill asked for. A
+// Partially Paid invoice keeps its status; only its dates move. That is
+// why this is NOT setTicketStatus('Billed') — that would reset the status
+// and the billing clock. Only an Issued or Partially Paid invoice can be
+// billed this way; Drafts are issued, Paid and Void are never re-billed.
+// Follows the sbSetTicketStatus pattern: read the current row, update
+// with a version check (the DB trigger bumps version on save).
 async function sbBillInvoice(invoice, userId) {
   const { data: current, error: curErr } = await supabase.from('invoices').select('*').eq('id', invoice.id).single()
   if (curErr) throw curErr
@@ -601,16 +607,19 @@ async function sbBillInvoice(invoice, userId) {
     throw new Error('Only an open invoice can be billed.')
   }
   const dates = invoiceBillingDates(current.payment_terms)
+  const patch = { issue_date: dates.issue_date, due_date: dates.due_date }
+  if (current.status === 'Issued') patch.status = 'Billed'
   const { data, error } = await supabase.from('invoices')
-    .update({ issue_date: dates.issue_date, due_date: dates.due_date })
+    .update(patch)
     .eq('id', invoice.id).eq('version', current.version).select().single()
   if (error) throw error
   if (!data) throw new VersionConflict('Billing conflict — this invoice changed since you opened it. Reload and try again.')
   return data
 }
 
-// Local mirror of sbBillInvoice: same dates-only update, version bumped
-// here (no DB trigger in local mode).
+// Local mirror of sbBillInvoice: same dates-only update (plus the
+// Issued -> Billed status change), version bumped here (no DB trigger in
+// local mode).
 function localBillInvoice(invoice, userId) {
   const rows = lsRead(LS_INVOICES, [])
   const idx = rows.findIndex((r) => r.id === invoice.id)
@@ -623,6 +632,7 @@ function localBillInvoice(invoice, userId) {
     ...rows[idx],
     issue_date: dates.issue_date,
     due_date: dates.due_date,
+    ...(rows[idx].status === 'Issued' ? { status: 'Billed' } : {}),
     version: (rows[idx].version || 1) + 1,
     updated_at: new Date().toISOString(),
   }
@@ -992,11 +1002,15 @@ function localSaveTicket(kind, ticket, lines, userId) {
   // Phase 3 payments (local mirror of sbSaveTicket): balance and status
   // follow the payments — Draft / Void untouched. A new invoice has no
   // payments yet, so paid is 0 and the balance is the full total.
+  // `billed` is whether the invoice already has a billing date: the saved
+  // row's issue_date for an existing invoice (a new invoice has no id
+  // yet, so the form-initializer date must NOT count — creation is not
+  // billing).
   if (kind === 'invoice') {
     const paidSoFar = ticket.id
       ? roundCents(localListPayments(ticket.id).reduce((s, p) => s + (Number(p.amount) || 0), 0))
       : 0
-    const derived = deriveInvoiceBalance(totals.total, paidSoFar, saved.status)
+    const derived = deriveInvoiceBalance(totals.total, paidSoFar, saved.status, saved.status === 'Billed' || (ticket.id && !!ticket.issue_date))
     saved.balance_due = derived.balanceDue
     saved.status = derived.status
     // Invoice dates (Nov 23, local mirror of sbSaveTicket): the store
@@ -1643,11 +1657,11 @@ async function sbListPaymentsForInvoices(invoiceIds) {
 // and status. Returns the updated invoice row. The invoice_guard trigger
 // still applies: a Sales user can only move an invoice that isn't already
 // Paid / Void / closed — which is exactly the states payments move
-// between (Issued <-> Partially Paid <-> Paid).
+// between (Issued / Billed <-> Partially Paid <-> Paid).
 async function sbRecomputeInvoiceBalance(invoiceId) {
   const { data: inv, error: invErr } = await supabase
     .from('invoices')
-    .select('id, total, status, balance_due')
+    .select('id, total, status, balance_due, issue_date')
     .eq('id', invoiceId)
     .single()
   if (invErr) throw invErr
@@ -1657,7 +1671,10 @@ async function sbRecomputeInvoiceBalance(invoiceId) {
     .eq('invoice_id', invoiceId)
   if (payErr) throw payErr
   const paid = roundCents((pays || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))
-  const derived = deriveInvoiceBalance(inv.total, paid, inv.status)
+  // `billed` is whether the invoice has a billing date — a Partially Paid
+  // invoice whose last payment is deleted goes back to Billed if it was
+  // billed, Issued if it was not.
+  const derived = deriveInvoiceBalance(inv.total, paid, inv.status, inv.status === 'Billed' || !!inv.issue_date)
   const { data: updated, error: updErr } = await supabase
     .from('invoices')
     .update({ balance_due: derived.balanceDue, status: derived.status })
@@ -1734,7 +1751,10 @@ function localRecomputeInvoiceBalance(invoiceId) {
   if (idx < 0) throw new Error('Invoice not found in local mode.')
   const inv = rows[idx]
   const paid = roundCents(localListPayments(invoiceId).reduce((s, p) => s + (Number(p.amount) || 0), 0))
-  const derived = deriveInvoiceBalance(inv.total, paid, inv.status)
+  // `billed` is whether the invoice has a billing date — a Partially Paid
+  // invoice whose last payment is deleted goes back to Billed if it was
+  // billed, Issued if it was not.
+  const derived = deriveInvoiceBalance(inv.total, paid, inv.status, inv.status === 'Billed' || !!inv.issue_date)
   const next = { ...inv, balance_due: derived.balanceDue, status: derived.status, version: (inv.version || 1) + 1, updated_at: new Date().toISOString() }
   rows[idx] = next
   lsWrite(LS_INVOICES, rows)
@@ -2008,15 +2028,16 @@ export const store = {
       if (idx < 0) throw new Error('Ticket not found.')
       const next = { ...rows[idx], status, ...(extra || {}), version: (rows[idx].version || 1) + 1 }
       // Issuing an invoice bills it out (Nov 23): the billing date is
-      // today and the due date runs from today — COD has no due date.
-      if (kind === 'invoice' && status === 'Issued') {
+      // today and the due date runs from today — COD has no due date. The
+      // status becomes 'Billed' (Nov 25), not 'Issued'.
+      if (kind === 'invoice' && status === 'Billed') {
         const dates = invoiceDatesOnSave({
           isNew: false,
           currentStatus: rows[idx].status,
           currentIssueDate: rows[idx].issue_date,
           currentDueDate: rows[idx].due_date,
           currentTerms: rows[idx].payment_terms,
-          newStatus: 'Issued',
+          newStatus: 'Billed',
           newTerms: rows[idx].payment_terms,
         })
         next.issue_date = dates.issue_date
@@ -2030,7 +2051,8 @@ export const store = {
   },
 
   // Complete & bill on an already-Open invoice (Nov 25): re-stamp the
-  // billing/due dates only — status untouched. See sbBillInvoice.
+  // billing/due dates, and an unbilled Open invoice becomes Billed — a
+  // Partially Paid invoice keeps its status. See sbBillInvoice.
   async billInvoice(invoice, userId) {
     if (!supabaseConfigured) return localBillInvoice(invoice, userId)
     return sbBillInvoice(invoice, userId)

@@ -6,7 +6,7 @@ import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
 import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
-const STATUSES = ['Draft', 'Issued', 'Partially Paid', 'Paid', 'Void']
+const STATUSES = ['Draft', 'Issued', 'Billed', 'Partially Paid', 'Paid', 'Void']
 
 export default function Invoices({ data, user, profile, isAdmin, settings, onReload, onError, openInvoiceId, openMode, onOpened, productPrefill, onProductPrefillConsumed, onViewClosed, onClearReturn, createNewSignal, onCreateNewConsumed }) {
   const [editing, setEditing] = useState(undefined)
@@ -95,19 +95,21 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
     return rows
   }, [data.invoices, fCustomer, fSales, fStatus, fFrom, fTo, overdueOnly, sortDir])
 
-  const open = data.invoices.filter((i) => ['Draft', 'Issued', 'Partially Paid'].includes(i.status))
+  const open = data.invoices.filter((i) => ['Draft', 'Issued', 'Billed', 'Partially Paid'].includes(i.status))
   const openValue = open.reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0)
   const overdue = data.invoices.filter((i) => isOverdue(i))
 
   // Issue a Draft invoice (billing date today, due date from terms). The
-  // same store call under both labels: "Issue" for ordinary Drafts, and
-  // "Complete & bill" for a fleet/terms Draft — the latter also opens the
-  // issued invoice's print view afterwards, ready to print/send, the same
-  // landing as the quote version. No confirm on either label, as before.
+  // status becomes 'Billed' (Nov 25), not 'Issued': 'Issued' (shown as
+  // Open) is only for a created-but-unbilled invoice. The same store call
+  // under both labels: "Issue" for ordinary Drafts, and "Complete & bill"
+  // for a fleet/terms Draft — the latter also opens the billed invoice's
+  // print view afterwards, ready to print/send, the same landing as the
+  // quote version. No confirm on either label, as before.
   async function issue(inv, opts = {}) {
     setBusy(inv.id)
     try {
-      const updated = await store.setTicketStatus('invoice', inv, 'Issued', user?.id)
+      const updated = await store.setTicketStatus('invoice', inv, 'Billed', user?.id)
       await onReload()
       if (opts.openPrint && updated) setPrinting(updated)
     }
@@ -118,16 +120,20 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   // moment. Unlike the Draft Issue action above, this MOVES dates — it
   // re-stamps the billing date to today and the due date from the terms —
   // so it needs a confirm, and it must say so plainly when the invoice
-  // was already billed once before. The status never changes: a Partially
-  // Paid invoice stays Partially Paid. After billing, the print view
-  // opens, ready to print/send. From the open form (opts.fromForm), the
-  // same caveat as the quote version: unsaved edits are not included.
+  // was already billed once before. An unbilled Open invoice becomes
+  // 'Billed' — the visible change Bill asked for; a Partially Paid
+  // invoice stays Partially Paid. After billing, the print view opens,
+  // ready to print/send. From the open form (opts.fromForm), the same
+  // caveat as the quote version: unsaved edits are not included.
   async function bill(inv, opts = {}) {
     const dates = invoiceBillingDates(inv.payment_terms)
     const alreadyBilled = inv.issue_date
       ? `This invoice was already billed on ${fmtDate(inv.issue_date)}. Billing it again will move the billing date to today and the due date to ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
       : `The billing date becomes today (${fmtDate(todayStr())}) and the due date becomes ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
-    if (!window.confirm(`Bill invoice ${inv.number} now? ${alreadyBilled}. The status does not change.${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
+    const statusNote = inv.status === 'Issued'
+      ? 'The status becomes Billed.'
+      : 'The status stays Partially Paid.'
+    if (!window.confirm(`Bill invoice ${inv.number} now? ${alreadyBilled}. ${statusNote}${opts.fromForm ? ' Save your changes first — unsaved edits on this form won\'t be included.' : ''}`)) return
     setBusy(`bill-${inv.id}`)
     try {
       const updated = await store.billInvoice(inv, user?.id)
@@ -322,7 +328,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             const bedSize = vf.bed_size || ''
             const color = vf.color || ''
             const overdue = isOverdue(inv)
-            const depositDue = ['Draft', 'Issued'].includes(inv.status) && isCodTicket(inv) && !paidInvoiceIds.has(inv.id)
+            const depositDue = ['Draft', 'Issued', 'Billed'].includes(inv.status) && isCodTicket(inv) && !paidInvoiceIds.has(inv.id)
             // Complete & bill (Nov 25): a Draft invoice for a fleet/terms
             // account issues under that label (same action, plus the print
             // view afterwards); any other Draft keeps "Issue".
@@ -353,7 +359,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
                     {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => completeAndBill ? issue(inv, { openPrint: true }) : issue(inv)}>{completeAndBill ? 'Complete & bill' : 'Issue'}</button>}
                     {['Issued', 'Partially Paid'].includes(inv.status) && completeAndBill && <button className="btn secondary small" disabled={busy === `bill-${inv.id}`} onClick={() => bill(inv)}>Complete &amp; bill</button>}
-                    {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (
+                    {isAdmin && ['Issued', 'Billed', 'Partially Paid', 'Paid'].includes(inv.status) && (
                       <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}
                   </div>
