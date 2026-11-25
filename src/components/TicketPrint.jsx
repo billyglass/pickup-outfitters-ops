@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents, printSpacerHeight } from '../lib/tickets.js'
+import { money, computeTotals, lineTotal, laborAmount, fmtDate, roundCents, printSpacerHeight, displayInvoiceStatus } from '../lib/tickets.js'
 import { formatPhone } from '../lib/phones.js'
 
 // Print layout matching Bill's Excel template (quote-invoice.xlsx):
@@ -87,7 +87,7 @@ export default function TicketPrint({ kind, ticket, lines, customer, vehicle, sa
           <div className="print-title">
             <h1>{isQuote ? 'QUOTATION' : 'INVOICE'}</h1>
             <div><strong>{isQuote ? 'Quote' : 'Invoice'} No:</strong> {ticket.number}</div>
-            <div><strong>Status:</strong> {ticket.status}</div>
+            <div><strong>Status:</strong> {displayInvoiceStatus(ticket.status)}</div>
           </div>
         </div>
 

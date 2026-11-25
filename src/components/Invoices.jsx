@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot, displayInvoiceStatus } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -261,7 +261,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
         </select>
         <select value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
           <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{displayInvoiceStatus(s)}</option>)}
         </select>
         <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="From date" />
         <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="To date" />
@@ -297,7 +297,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     cell, so it goes away for Sales along with the column. */}
                 {isAdmin && <td className="nowrap">{fmtDate(inv.due_date)}{overdue && <div className="pill" style={{ background: '#fdecea', color: '#b3261e' }}>Overdue</div>}</td>}
                 <td className="nowrap">{namesOf(inv)}</td>
-                <td className="nowrap">{inv.status === 'Paid' ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>Paid</span> : inv.status}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
+                <td className="nowrap">{inv.status === 'Paid' ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>Paid</span> : displayInvoiceStatus(inv.status)}{inv.accounting_period_closed ? ' · closed' : ''}{depositDue && <div><span className="flag-pill">Deposit due</span></div>}</td>
                 <td className="num">${money(inv.total)}</td>
                 {/* Paid in full (Nov 25): the balance is $0 — show green PIF
                     instead of $0.00. An overpaid invoice (negative balance)

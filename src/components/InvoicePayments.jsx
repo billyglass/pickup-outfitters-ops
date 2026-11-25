@@ -140,6 +140,18 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
     setSavedMsg('')
   }
 
+  // "Paid in full" checkbox (Nov 25): checked exactly when the amount in
+  // the box equals the remaining balance — checking it fills the balance,
+  // typing a different amount unchecks it on its own. Unchecking clears
+  // the amount so the shortcut can be undone.
+  const pifChecked = balance > 0 && roundCents(Number(amount) || 0) === balance
+  function togglePif() {
+    if (pifChecked) setAmount('')
+    else setAmount(balance.toFixed(2))
+    setConfirmOverpay(null)
+    setSavedMsg('')
+  }
+
   function record() {
     const amt = roundCents(Number(amount) || 0)
     if (!(amt > 0)) { setError('Enter a payment amount greater than $0.'); return }
@@ -268,6 +280,12 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
               />
             </div>
           </div>
+          {canRecord && balance > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={pifChecked} onChange={togglePif} />
+              Paid in full — fill the remaining balance (${money(balance)})
+            </label>
+          )}
           {confirmOverpay ? (
             <div className="warn" style={{ marginTop: 12 }}>
               This is ${money(confirmOverpay.over)} more than the balance due of ${money(balance)}.

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
 import Login, { SetPassword } from './components/Login.jsx'
@@ -498,7 +498,7 @@ export default function App() {
               {todaysTickets.length === 0 && <p className="muted">No tickets created today yet.</p>}
               {todaysTickets.map(({ type, t }) => (
                 <div key={`${type}-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
-                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} <span className="pill">{type === 'quote' ? 'Quote' : 'Invoice'}</span> · {t.status} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
+                  <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} <span className="pill">{type === 'quote' ? 'Quote' : 'Invoice'}</span> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
                   <span>
                     <button className="btn small" onClick={() => openTicket(type, t.id, 'view')}>View</button>{' '}
                     <button className="btn secondary small" onClick={() => openTicket(type, t.id, 'edit')}>Edit</button>
@@ -578,7 +578,7 @@ export default function App() {
             {(searchResults.tickets || []).map((r) => (
               <div key={`${r.type}-${r.ticket.id}`} className="result-row">
                 <div>
-                  <div className="result-title"><strong>{r.ticket.number}</strong> <span className="pill">{r.type === 'quote' ? 'Quote' : 'Invoice'}</span> <span className="pill">{r.ticket.status}</span></div>
+                  <div className="result-title"><strong>{r.ticket.number}</strong> <span className="pill">{r.type === 'quote' ? 'Quote' : 'Invoice'}</span> <span className="pill">{displayInvoiceStatus(r.ticket.status)}</span></div>
                   <div className="result-meta">{r.customer} · VIN {r.vin || '—'} · {fmtDate(r.ticket.issue_date || (r.ticket.created_at || '').slice(0, 10))} · {r.salesperson || '—'}</div>
                   <div className="muted small">Matched: {r.match}</div>
                 </div>
@@ -678,7 +678,7 @@ export default function App() {
                   <h3>Invoices ({profileInvoices.length})</h3>
                   {(showAllProfileInvoices ? profileInvoices : profileInvoices.slice(0, 5)).map((t) => (
                     <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
-                      <span><strong>{t.number}</strong> · {t.status} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
+                      <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
                       {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
                       <span>
                         <button className="btn small" onClick={() => openTicket('invoice', t.id, 'view')}>View</button>{' '}
@@ -716,7 +716,7 @@ export default function App() {
                   <h3>Quotes ({profileQuotes.length})</h3>
                   {(showAllProfileQuotes ? profileQuotes : profileQuotes.slice(0, 5)).map((t) => (
                     <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
-                      <span><strong>{t.number}</strong> · {t.status} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
+                      <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
                       {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
                       <span>
                         <button className="btn small" onClick={() => openTicket('quote', t.id, 'view')}>View</button>{' '}
@@ -835,7 +835,7 @@ export default function App() {
                                 {vInvoices.map((inv) => (
                                   <div key={inv.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
                                     <button type="button" onClick={() => openInvoice(inv)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{inv.number}</button>
-                                    {' '}· {inv.status} · {fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))} · {ticketCustomerName(inv, data.customers)} · ${money(inv.total)}
+                                    {' '}· {displayInvoiceStatus(inv.status)} · {fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))} · {ticketCustomerName(inv, data.customers)} · ${money(inv.total)}
                                   </div>
                                 ))}
                                 <h4 style={{ margin: '12px 0 4px' }}>Quotes ({vQuotes.length})</h4>

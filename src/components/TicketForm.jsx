@@ -9,7 +9,7 @@ import {
   customerSnapshot,
   vehicleFieldsFromSnapshot, vehicleSnapshotFromFields, findVehicleByVin, vehicleAutofillResult,
   walkInCustomerSnapshot, isWalkInTicket, findCustomerByPhoneOrEmail, customerTypeOf, fmtDate,
-  canEditTicket, salespersonNamesOf, canEditSalespeople,
+  canEditTicket, salespersonNamesOf, canEditSalespeople, displayInvoiceStatus,
 } from '../lib/tickets.js'
 
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60', 'COD']
@@ -410,7 +410,7 @@ export default function TicketForm({
       <div className="row-between">
         <h2 style={{ margin: 0 }}>
           {initial ? `${isQuote ? 'Quote' : 'Invoice'} ${ticket.number || initial.number}` : prefill ? `New ${isQuote ? 'quote' : 'invoice'} (${prefill.fromProduct ? `from ${prefill.sourceLabel}` : `copy of ${prefill.sourceLabel}`})` : `New ${isQuote ? 'quote' : 'invoice'}`}
-          {initial && <span className="pill" style={{ marginLeft: 8 }}>{initial.status}</span>}
+          {initial && <span className="pill" style={{ marginLeft: 8 }}>{displayInvoiceStatus(initial.status)}</span>}
           {prefill && <span className="pill" style={{ marginLeft: 8 }}>New — number assigned on save</span>}
         </h2>
         <span className={`saved ${status === 'saved' ? 'saved-ok' : status === 'saving' ? 'saving' : 'unsaved'}`}>
@@ -454,7 +454,7 @@ export default function TicketForm({
           Pick the customer above, check the line, then Save. A new number is assigned on save.
         </div>
       )}
-      {readOnly && <div className="warn">This ticket is locked for editing ({initial?.status}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
+      {readOnly && <div className="warn">This ticket is locked for editing ({displayInvoiceStatus(initial?.status)}{initial?.accounting_period_closed ? ' · closed period' : ''}). {isAdmin ? 'Admin: you can still correct it — the change is logged.' : 'Ask an Admin to correct it.'}</div>}
       {initial && <p className="muted small">Created by {profiles.find((p) => p.id === initial.created_by)?.name || '—'} · Salesperson {salespersonNamesOf(initial, profiles)} · Version {initial.version} · {initial.updated_at ? `Last updated ${fmtDate(initial.updated_at)}` : ''}</p>}
 
       <section className="ticket-section">
@@ -830,7 +830,7 @@ export default function TicketForm({
           ) : (
             <span>
               {!isQuote && ticket.status !== 'Draft' ? (
-                <>Delete {ticket.number}? This invoice is {ticket.status}{Number(ticket.balance_due) > 0 ? <> with a balance due of ${money(Number(ticket.balance_due))}</> : ''} — deleting removes it from accounts receivable and cannot be undone. No other invoice's number changes.</>
+                <>Delete {ticket.number}? This invoice is {displayInvoiceStatus(ticket.status)}{Number(ticket.balance_due) > 0 ? <> with a balance due of ${money(Number(ticket.balance_due))}</> : ''} — deleting removes it from accounts receivable and cannot be undone. No other invoice's number changes.</>
               ) : (
                 <>Delete this {isQuote ? 'quote' : 'draft invoice'}? This cannot be undone. No other invoice's number changes.</>
               )}{' '}

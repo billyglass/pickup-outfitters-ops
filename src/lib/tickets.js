@@ -210,6 +210,15 @@ export function invoicePaymentSummary(total, livePayments, pendingPayments) {
   return { paid, balance: roundCents((Number(total) || 0) - paid), pendingTotal, pendingCount: (pendingPayments || []).length }
 }
 
+// Display label for an invoice status (Nov 25): the stored status is
+// "Issued", but Bill wants it to read "Open" everywhere it shows — the
+// invoice is out and awaiting payment. Display only; the DB value and all
+// status logic still use "Issued". Anything else passes through unchanged
+// (so it is safe on quote statuses too).
+export function displayInvoiceStatus(status) {
+  return status === 'Issued' ? 'Open' : status
+}
+
 // Payments list (Admin reconciliation, Nov 24): every payment taken,
 // newest first, filterable by date range, method, and who recorded it.
 // Payment dates are ISO YYYY-MM-DD strings, so plain string comparison
