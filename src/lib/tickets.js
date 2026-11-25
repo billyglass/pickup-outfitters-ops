@@ -717,14 +717,19 @@ export function customerTypeOf(customer) {
 }
 
 // "Complete & bill" (Nov 25): a fleet/terms job is done and the customer
-// can be billed. Shown only on Open, unconverted quotes for a fleet
-// customer or a terms account — walk-ins are COD with no customer, so
-// they never see it; a Retail customer on Net 30 does (a terms account).
-// customer is the linked customer record (null/undefined for a walk-in).
-export function canCompleteAndBill(quote, customer) {
-  if (!quote || quote.status !== 'Open' || quote.converted_invoice_id) return false
+// can be billed. One rule for both kinds: an Open, unconverted quote or
+// a Draft invoice, for a fleet customer or a terms account — walk-ins are
+// COD with no customer, so they never see it; a Retail customer on Net 30
+// does (a terms account). Quotes never carry a Draft status and invoices
+// never carry an Open one, so the status check is safe for both; only
+// quotes carry converted_invoice_id. customer is the linked customer
+// record (null/undefined for a walk-in).
+export function canCompleteAndBill(ticket, customer) {
+  if (!ticket) return false
+  if (ticket.status !== 'Open' && ticket.status !== 'Draft') return false
+  if (ticket.converted_invoice_id) return false
   if (customer && customer.customer_type === 'Fleet') return true
-  return !isCodTicket(quote)
+  return !isCodTicket(ticket)
 }
 
 // Find an existing customer by a walk-in's phone (digits only) or email

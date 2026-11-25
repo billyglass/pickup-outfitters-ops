@@ -395,9 +395,16 @@ export default function TicketForm({
           return
         }
       }
+      // Complete & bill (Nov 25): a Draft invoice for a fleet/terms account
+      // saved with the Issue button opens the issued invoice's print view
+      // afterwards (same landing as the list-row button) instead of closing
+      // to the list. Same label rule as the button above — the current form
+      // customer/terms. The parent (Invoices) opens the print view from
+      // the extra flag; any other save closes to the list as before.
+      const wasCompleteAndBill = !isQuote && initial && initial.status === 'Draft' && targetStatus === 'Issued' && canCompleteAndBill(ticket, customer)
       setTicket(saved)
       setStatus('saved')
-      onSaved(saved)
+      onSaved(saved, wasCompleteAndBill ? { openPrint: true } : undefined)
     } catch (err) {
       setStatus('unsaved')
       if (err instanceof VersionConflict) setConflict(err.message)
@@ -791,7 +798,13 @@ export default function TicketForm({
         )}
         {!readOnly && !isQuote && initial && initial.status === 'Draft' && (
           <>
-            <button className="btn" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Issued' }}>{status === 'saving' ? 'Saving…' : 'Save & issue'}</button>
+            {/* Complete & bill (Nov 25): a Draft invoice for a fleet/terms
+                account issues under that label instead of "Save & issue".
+                Same save path underneath (submitStatusRef 'Issued') — only
+                the label changes, and it follows the CURRENT form
+                customer/terms, so picking a different customer can show or
+                hide it. "Save draft" stays as-is. */}
+            <button className="btn" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Issued' }}>{status === 'saving' ? 'Saving…' : canCompleteAndBill(ticket, customer) ? 'Complete & bill' : 'Save & issue'}</button>
             <button className="btn secondary" type="submit" disabled={status === 'saving'} onClick={() => { submitStatusRef.current = 'Draft' }}>{status === 'saving' ? 'Saving…' : 'Save draft'}</button>
           </>
         )}

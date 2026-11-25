@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
-import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot, displayInvoiceStatus } from '../lib/tickets.js'
+import { isOverdue, duplicateTicket, ticketCustomerName, isWalkInTicket, customerTypeOf, fmtDate, isCodTicket, canEditTicket, salespersonNamesOf, money, vehicleFieldsFromSnapshot, displayInvoiceStatus, canCompleteAndBill } from '../lib/tickets.js'
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
@@ -99,9 +99,18 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
   const openValue = open.reduce((s, i) => s + Number(i.balance_due ?? i.total ?? 0), 0)
   const overdue = data.invoices.filter((i) => isOverdue(i))
 
-  async function issue(inv) {
+  // Issue a Draft invoice (billing date today, due date from terms). The
+  // same store call under both labels: "Issue" for ordinary Drafts, and
+  // "Complete & bill" for a fleet/terms Draft — the latter also opens the
+  // issued invoice's print view afterwards, ready to print/send, the same
+  // landing as the quote version. No confirm on either label, as before.
+  async function issue(inv, opts = {}) {
     setBusy(inv.id)
-    try { await store.setTicketStatus('invoice', inv, 'Issued', user?.id); await onReload() }
+    try {
+      const updated = await store.setTicketStatus('invoice', inv, 'Issued', user?.id)
+      await onReload()
+      if (opts.openPrint && updated) setPrinting(updated)
+    }
     catch (err) { onError(err.message || 'Issue failed.') } finally { setBusy('') }
   }
 
@@ -200,6 +209,10 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
               : `Saved ${extra.savedAsCustomer.company} as a customer and linked ${saved.number} to them.`)
           }
           await onReload()
+          // Complete & bill from the form (Nov 25): instead of closing to
+          // the list, open the issued invoice's print view, ready to
+          // print/send — the same landing as the list-row button.
+          if (extra?.openPrint) setPrinting(saved)
         }}
         onCancel={() => setEditing(undefined)}
         onView={editing ? () => setPrinting(editing) : undefined}
@@ -285,6 +298,10 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
             const color = vf.color || ''
             const overdue = isOverdue(inv)
             const depositDue = ['Draft', 'Issued'].includes(inv.status) && isCodTicket(inv) && !paidInvoiceIds.has(inv.id)
+            // Complete & bill (Nov 25): a Draft invoice for a fleet/terms
+            // account issues under that label (same action, plus the print
+            // view afterwards); any other Draft keeps "Issue".
+            const completeAndBill = canCompleteAndBill(inv, data.customers.find((c) => c.id === inv.customer_id))
             return (
               <tr key={inv.id}>
                 <td className="nowrap"><strong>{inv.number}</strong>{inv.quote_id && <div className="muted small">from quote</div>}{inv.previous_numbers?.length ? <div className="muted small">was {inv.previous_numbers.join(', ')}</div> : ''}</td>
@@ -309,7 +326,7 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     <button className="btn secondary small" onClick={() => setEditing(inv)}>Edit</button>
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
-                    {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => issue(inv)}>Issue</button>}
+                    {inv.status === 'Draft' && <button className="btn secondary small" disabled={busy === inv.id} onClick={() => completeAndBill ? issue(inv, { openPrint: true }) : issue(inv)}>{completeAndBill ? 'Complete & bill' : 'Issue'}</button>}
                     {isAdmin && ['Issued', 'Partially Paid', 'Paid'].includes(inv.status) && (
                       <button className="btn danger small" onClick={() => setVoiding(inv)}>Void…</button>
                     )}
