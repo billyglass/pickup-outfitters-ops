@@ -75,6 +75,12 @@ table.list td .sub { white-space: nowrap; }
 /* Row actions stay on one line, compact buttons. */
 .row.actions { flex-wrap: nowrap; gap: 6px; }
 .btn.small { padding: 6px 10px; font-size: 13px; }
+/* Invoices list (Nov 25 cleanup): the five buttons on every row were the
+   loudest thing on the page — ten orange View buttons and ten red Void
+   buttons. The row buttons are smaller and quieter here (View is an
+   outlined button like the rest now), so the table reads as a list first
+   and the actions column stops pushing the table past the screen edge. */
+.invoice-actions .btn.small { padding: 5px 8px; font-size: 12px; }
 /* Customer picker (combobox): type to search, matches drop below. */
 .combo { position: relative; }
 .combo input { padding-right: 32px; }

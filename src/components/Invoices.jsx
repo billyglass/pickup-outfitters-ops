@@ -358,8 +358,8 @@ export default function Invoices({ data, user, profile, isAdmin, settings, onRel
                     still shows the amount, so the credit isn't hidden. */}
                 <td className="num">{inv.status === 'Paid' && Number(inv.balance_due ?? inv.total ?? 0) === 0 ? <span style={{ color: '#1e7e34', fontWeight: 700 }}>PIF</span> : `$${money(inv.balance_due ?? inv.total ?? 0)}`}</td>
                 <td>
-                  <div className="row actions">
-                    <button className="btn small" onClick={() => setPrinting(inv)}>View</button>
+                  <div className="row actions invoice-actions">
+                    <button className="btn secondary small" onClick={() => setPrinting(inv)}>View</button>
                     <button className="btn secondary small" onClick={() => setEditing(inv)}>Edit</button>
                     <button className="btn secondary small" onClick={() => duplicate(inv)}>Duplicate</button>
                     {isWalkInTicket(inv) && <button className="btn secondary small" onClick={() => setSaveAs(inv)}>Save as customer</button>}
