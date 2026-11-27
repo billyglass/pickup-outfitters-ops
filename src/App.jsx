@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
 import { getSession, getProfile, signOut, enrollMfa, verifyMfaEnroll, listMfaFactors, updatePassword, isInviteOrRecoveryCallback, clearAuthHash } from './lib/auth.js'
 import { store, globalSearch } from './lib/store.js'
-import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates, todayStr } from './lib/tickets.js'
+import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
 import Login, { SetPassword } from './components/Login.jsx'
@@ -302,7 +302,7 @@ export default function App() {
     const dates = invoiceBillingDates(ticket.payment_terms)
     const alreadyBilled = ticket.issue_date
       ? `This invoice was already billed on ${fmtDate(ticket.issue_date)}. Billing it again will move the billing date to today and the due date to ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
-      : `The billing date becomes today (${fmtDate(todayStr())}) and the due date becomes ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
+      : `The billing date becomes today (${fmtDate(todayStr)}) and the due date becomes ${dates.due_date ? fmtDate(dates.due_date) : 'none (COD)'}`
     const statusNote = ticket.status === 'Issued'
       ? 'The status becomes Billed.'
       : 'The status stays Partially Paid.'
@@ -411,6 +411,11 @@ export default function App() {
     const d = new Date(iso)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
+  // NOTE (Nov 27 bug fix): this local string shadows the tickets.js
+  // todayStr() FUNCTION of the same name — in this file todayStr is a
+  // plain 'YYYY-MM-DD' string, never call it as todayStr(). Calling it
+  // broke search-result Complete & bill silently (it threw before the
+  // confirm ever appeared). The function is deliberately NOT imported.
   const todayStr = localDay(new Date().toISOString())
   // Today's tickets, split by kind (Nov 25): one list for invoices, one
   // for quotes — Bill wants them separate, not combined.
