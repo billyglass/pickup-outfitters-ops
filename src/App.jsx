@@ -21,6 +21,7 @@ import ShopChat from './components/ShopChat.jsx'
 import Payments from './components/Payments.jsx'
 import AccountsReceivable from './components/AccountsReceivable.jsx'
 import EndOfDay from './components/EndOfDay.jsx'
+import CollapsibleCard, { useCollapsed, CollapseButton } from './components/CollapsibleCard.jsx'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -42,14 +43,13 @@ const TABS = [
   { id: 'settings', label: 'Settings', admin: true },
 ]
 
-function Placeholder({ title, phase, children }) {
+function Placeholder({ id, userId, title, phase, children }) {
   return (
-    <div className="card">
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
+    <CollapsibleCard id={id} userId={userId} title={title} label={title}>
       <p className="pill">{phase} — coming next</p>
       <p className="muted">{children}</p>
       <p className="muted">No data is shown here yet, and no placeholder or fake numbers are used.</p>
-    </div>
+    </CollapsibleCard>
   )
 }
 
@@ -70,6 +70,13 @@ export default function App() {
   const [showAllProfileInvoices, setShowAllProfileInvoices] = useState(false)
   const [showAllProfileVehicles, setShowAllProfileVehicles] = useState(false)
   const [showAllProfileQuotes, setShowAllProfileQuotes] = useState(false)
+  // Profile history sections are also collapsible (Nov 27) — the hooks
+  // live here, at the top of App, because these sections render inline,
+  // not in their own component. (useCollapsed re-reads when the user id
+  // arrives after sign-in, so the right person's state loads.)
+  const { collapsed: collapsedProfileInvoices, toggle: toggleProfileInvoices } = useCollapsed(user?.id, 'profile-invoices')
+  const { collapsed: collapsedProfileVehicles, toggle: toggleProfileVehicles } = useCollapsed(user?.id, 'profile-vehicles')
+  const { collapsed: collapsedProfileQuotes, toggle: toggleProfileQuotes } = useCollapsed(user?.id, 'profile-quotes')
   const [editingCustomer, setEditingCustomer] = useState(undefined) // undefined = list, null = new, object = edit
   const [editingVehicle, setEditingVehicle] = useState(undefined)
   // Vehicles tab: expanded vehicle (full ticket history) + deep-link to open
@@ -542,11 +549,7 @@ export default function App() {
               Sales users see no revenue, margin, or report data anywhere in this system — those areas are Admin-only and blocked in the database. Product costs are shared with everyone (Nov 19) so any salesman can price a service.
             </p>
             <ShopChat data={data} user={user} isAdmin={isAdmin} hasNewChat={hasNewChat} onChatSeen={handleChatSeen} />
-            <div className="card">
-              <div className="row-between">
-                <h2 style={{ margin: 0 }}>Today's invoices ({todaysInvoices.length})</h2>
-                <span className="muted small">{fmtDate(todayStr)}</span>
-              </div>
+            <CollapsibleCard id="dashboard-today-invoices" userId={user?.id} title={<>Today's invoices ({todaysInvoices.length})</>} label="Today's invoices" headerExtra={<span className="muted small">{fmtDate(todayStr)}</span>}>
               <p className="muted small">Invoices created today — newest first. View shows the print version; Edit opens the form.</p>
               {todaysInvoices.length === 0 && <p className="muted">No invoices created today yet.</p>}
               {todaysInvoices.map((t) => (
@@ -558,12 +561,8 @@ export default function App() {
                   </span>
                 </div>
               ))}
-            </div>
-            <div className="card">
-              <div className="row-between">
-                <h2 style={{ margin: 0 }}>Today's quotes ({todaysQuotes.length})</h2>
-                <span className="muted small">{fmtDate(todayStr)}</span>
-              </div>
+            </CollapsibleCard>
+            <CollapsibleCard id="dashboard-today-quotes" userId={user?.id} title={<>Today's quotes ({todaysQuotes.length})</>} label="Today's quotes" headerExtra={<span className="muted small">{fmtDate(todayStr)}</span>}>
               <p className="muted small">Quotes created today — newest first. View shows the print version; Edit opens the form.</p>
               {todaysQuotes.length === 0 && <p className="muted">No quotes created today yet.</p>}
               {todaysQuotes.map((t) => (
@@ -575,12 +574,8 @@ export default function App() {
                   </span>
                 </div>
               ))}
-            </div>
-            <div className="card">
-              <div className="row-between">
-                <h2 style={{ margin: 0 }}>Open quotes to chase ({chaseQuotes.length})</h2>
-                <button className="btn secondary" onClick={() => setTab('quotes')}>All quotes →</button>
-              </div>
+            </CollapsibleCard>
+            <CollapsibleCard id="dashboard-chase-quotes" userId={user?.id} title={<>Open quotes to chase ({chaseQuotes.length})</>} label="Open quotes to chase" headerExtra={<button className="btn secondary" onClick={() => setTab('quotes')}>All quotes →</button>}>
               <p className="muted small">Follow-up due first, then oldest — the ones waiting longest get chased first.</p>
               {chaseQuotes.length === 0 && <p className="muted">No open quotes. Nothing to chase.</p>}
               {chaseQuotes.slice(0, 8).map((q) => (
@@ -593,18 +588,17 @@ export default function App() {
                 </div>
               ))}
               {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
-            </div>
-            <SalesDashboard data={data} today={todayStr} onOpenTicket={openTicket} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
+            </CollapsibleCard>
+            <SalesDashboard data={data} today={todayStr} userId={user?.id} onOpenTicket={openTicket} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
             {isAdmin && (
-              <AdminMetrics data={data} today={todayStr} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
+              <AdminMetrics data={data} today={todayStr} userId={user?.id} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
             )}
           </div>
         )}
 
         {tab === 'search' && searchResults && (
           <>
-          <div className="card">
-            <h2 style={{ marginTop: 0 }}>Search results for “{searchQuery}”</h2>
+          <CollapsibleCard id="search-results" userId={user?.id} title={<>Search results for “{searchQuery}”</>} label="Search results">
             <p className="muted small">Searches inside quotes and invoices too — VIN (full / last 6 / last 8), part numbers, line-item descriptions, numbers, and PO numbers.</p>
             <div className="row filters" style={{ marginBottom: 12 }}>
               <select value={searchFilters.type} onChange={(e) => setSearchFilters({ ...searchFilters, type: e.target.value })}>
@@ -641,7 +635,6 @@ export default function App() {
               <input type="date" value={searchFilters.to} onChange={(e) => setSearchFilters({ ...searchFilters, to: e.target.value })} aria-label="To date" />
               <button className="btn secondary" onClick={runSearch}>Apply filters</button>
             </div>
-          </div>
           <div className="result-group">
             <h3>Tickets ({(searchResults.tickets || []).length})</h3>
             {(searchResults.tickets || []).length === 0 && <p className="muted">No quotes or invoices matched.</p>}
@@ -693,6 +686,7 @@ export default function App() {
               </div>
             ))}
           </div>
+          </CollapsibleCard>
           </>
         )}
 
@@ -750,7 +744,11 @@ export default function App() {
                   <CustomerPhotos key={selectedCustomer.id} customerId={selectedCustomer.id} userId={user?.id} />
                 </div>
                 <div className="ticket-section">
-                  <h3>Invoices ({profileInvoices.length})</h3>
+                  <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Invoices ({profileInvoices.length})</span>
+                    <CollapseButton collapsed={collapsedProfileInvoices} onToggle={toggleProfileInvoices} label="Customer invoices" />
+                  </h3>
+                  <div className="collapse-body" style={collapsedProfileInvoices ? { display: 'none' } : undefined}>
                   {(showAllProfileInvoices ? profileInvoices : profileInvoices.slice(0, 5)).map((t) => (
                     <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
@@ -769,9 +767,14 @@ export default function App() {
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
                 <div className="ticket-section">
-                  <h3>Vehicles ({profileVehicles.length})</h3>
+                  <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Vehicles ({profileVehicles.length})</span>
+                    <CollapseButton collapsed={collapsedProfileVehicles} onToggle={toggleProfileVehicles} label="Customer vehicles" />
+                  </h3>
+                  <div className="collapse-body" style={collapsedProfileVehicles ? { display: 'none' } : undefined}>
                   {(showAllProfileVehicles ? profileVehicles : profileVehicles.slice(0, 5)).map((v) => (
                     <div key={v.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''}</span>
@@ -786,9 +789,14 @@ export default function App() {
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
                 <div className="ticket-section">
-                  <h3>Quotes ({profileQuotes.length})</h3>
+                  <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Quotes ({profileQuotes.length})</span>
+                    <CollapseButton collapsed={collapsedProfileQuotes} onToggle={toggleProfileQuotes} label="Customer quotes" />
+                  </h3>
+                  <div className="collapse-body" style={collapsedProfileQuotes ? { display: 'none' } : undefined}>
                   {(showAllProfileQuotes ? profileQuotes : profileQuotes.slice(0, 5)).map((t) => (
                     <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
@@ -807,15 +815,12 @@ export default function App() {
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
               </div>
               </>
             ) : (
-              <div className="card">
-                <div className="row-between">
-                  <h2 style={{ margin: 0 }}>Customers ({customers.length})</h2>
-                  <button className="btn" onClick={() => setEditingCustomer(null)}>+ New customer</button>
-                </div>
+              <CollapsibleCard id="customers-list" userId={user?.id} title={<>Customers ({customers.length})</>} label="Customers list" headerExtra={<button className="btn" onClick={() => setEditingCustomer(null)}>+ New customer</button>}>
                 <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter by company name…" style={{ marginTop: 12 }} />
                 <div className="row" style={{ marginTop: 12 }} role="group" aria-label="Customer type filter">
                   <button type="button" className={customerTypeFilter === '' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('')}>All ({data.customers.length})</button>
@@ -838,7 +843,7 @@ export default function App() {
                   </tbody>
                 </table>
                 {customers.length === 0 && <p className="muted">No customers yet. Start fresh, or import from QuickBooks (Admin → Import tab).</p>}
-              </div>
+              </CollapsibleCard>
             )}
           </>
         )}
@@ -857,10 +862,7 @@ export default function App() {
                 onDelete={isAdmin && editingVehicle?.id ? () => handleDeleteVehicle(editingVehicle.id) : undefined}
               />
             ) : (
-              <div className="card">
-                <div className="row-between">
-                  <h2 style={{ margin: 0 }}>Vehicles ({vehicles.length})</h2>
-                </div>
+              <CollapsibleCard id="vehicles-list" userId={user?.id} title={<>Vehicles ({vehicles.length})</>} label="Vehicles list">
                 <p className="muted">Vehicles are created automatically from quotes and invoices — enter the VIN and Year/Make/Model on the ticket and it shows up here. Use Edit below to correct a typo on a vehicle record.</p>
                 <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Filter by VIN, fleet/unit, make…" style={{ marginTop: 12 }} />
                 <table>
@@ -930,7 +932,7 @@ export default function App() {
                   </tbody>
                 </table>
                 {vehicles.length === 0 && <p className="muted">No vehicles yet — create a quote or invoice and enter the VIN and Year/Make/Model on the ticket, and the vehicle will appear here.</p>}
-              </div>
+              </CollapsibleCard>
             )}
           </>
         )}
@@ -945,21 +947,21 @@ export default function App() {
           <Products data={data} user={user} isAdmin={isAdmin} onReload={loadData} onError={setError} onAddToInvoice={(p) => { setProductInvoicePrefill(invoiceFromProduct(p, user?.id, data.settings)); setTab('invoices') }} />
         )}
         {tab === 'ar' && isAdmin && (
-          <AccountsReceivable data={data} today={todayStr} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
+          <AccountsReceivable data={data} today={todayStr} userId={user?.id} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'payments' && isAdmin && (
-          <Payments data={data} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
+          <Payments data={data} userId={user?.id} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'endofday' && (
-          <EndOfDay data={data} today={todayStr} isAdmin={isAdmin} onReload={loadData} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
+          <EndOfDay data={data} today={todayStr} isAdmin={isAdmin} userId={user?.id} onReload={loadData} onOpenInvoice={(inv) => openTicket('invoice', inv.id, 'view')} />
         )}
         {tab === 'ap' && isAdmin && (
-          <Placeholder title="Accounts payable" phase="Phase 3">
+          <Placeholder id="placeholder-ap" userId={user?.id} title="Accounts payable" phase="Phase 3">
             Vendor records, vendor bills, due dates, payment history, and duplicate-bill warnings.
           </Placeholder>
         )}
         {tab === 'reports' && isAdmin && (
-          <Placeholder title="Reports" phase="Phase 4">
+          <Placeholder id="placeholder-reports" userId={user?.id} title="Reports" phase="Phase 4">
             Sales invoiced vs. payments collected, aging, customer and salesperson reporting,
             quote conversion, AP totals, tax summaries, and gross profit only where cost is known.
           </Placeholder>
@@ -968,12 +970,12 @@ export default function App() {
           <ImportCustomers
             existingCustomers={data.customers}
             existingContacts={data.contacts}
+            userId={user?.id}
             onImported={loadData}
           />
         )}
         {tab === 'settings' && isAdmin && (
-          <div className="card">
-            <h2 style={{ marginTop: 0 }}>Settings (Admin only)</h2>
+          <CollapsibleCard id="settings" userId={user?.id} title="Settings (Admin only)" label="Settings">
             <p className="muted">
               Tax rate: {data.settings ? `${(Number(data.settings.tax_rate) * 100).toFixed(2)}%` : '—'} ·
               Terms: {data.settings?.default_payment_terms || '—'} ·
@@ -1075,7 +1077,7 @@ export default function App() {
                 {pwBusy ? 'Saving…' : 'Change password'}
               </button>
             </div>
-          </div>
+          </CollapsibleCard>
         )}
       </div>
     </div>

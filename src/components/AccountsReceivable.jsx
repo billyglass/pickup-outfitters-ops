@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { fmtDate, money, ticketCustomerName, customerTypeOf, displayInvoiceStatus } from '../lib/tickets.js'
 import { agingBucket, agingBucketLabel, agingSummary, daysPastDue, isAgingInvoice, AGING_BUCKETS } from '../lib/arAging.js'
 import ComboBox from './ComboBox.jsx'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // Accounts receivable — Admin-only aging report (Phase 3, Nov 25). One
 // page: how much is owed, and how far past due it is. Aging runs off the
@@ -17,7 +18,7 @@ import ComboBox from './ComboBox.jsx'
 // whatever its status now (a job billed and paid in full today still
 // counts as pushed through today). Void is excluded; Drafts never qualify
 // because they have no billing date yet.
-export default function AccountsReceivable({ data, today, onOpenInvoice }) {
+export default function AccountsReceivable({ data, today, userId, onOpenInvoice }) {
   const [bucket, setBucket] = useState('')
   const [fCustomer, setFCustomer] = useState('')
 
@@ -51,10 +52,7 @@ export default function AccountsReceivable({ data, today, onOpenInvoice }) {
 
   return (
     <>
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Accounts receivable — {filtered.length}{filtered.length !== aging.length ? ` of ${aging.length}` : ''} invoices</h2>
-      </div>
+    <CollapsibleCard id="ar-aging" userId={userId} title={<>Accounts receivable — {filtered.length}{filtered.length !== aging.length ? ` of ${aging.length}` : ''} invoices</>} label="Accounts receivable">
       <p className="muted small">Open invoices by how far past due they are. Due dates only start counting once an invoice is billed — an open invoice that hasn&apos;t been billed yet shows as Not yet billed. Click an invoice number to open that invoice.</p>
       <div className="stat-strip">
         <div className="stat"><span className="num">${money(summary.total)}</span><span className="label">Total open</span></div>
@@ -113,11 +111,8 @@ export default function AccountsReceivable({ data, today, onOpenInvoice }) {
           </table>
         </div>
       )}
-    </div>
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Billed today ({billedToday.length}) · ${money(billedTodayTotal)} billed</h2>
-      </div>
+    </CollapsibleCard>
+    <CollapsibleCard id="ar-billed-today" userId={userId} title={<>Billed today ({billedToday.length}) · ${money(billedTodayTotal)} billed</>} label="Billed today">
       <p className="muted small">Invoices billed today — Complete &amp; bill hit, or a Draft issued — newest first. Click an invoice number to open that invoice.</p>
       {billedToday.length === 0 ? (
         <p className="muted">Nothing billed yet today.</p>
@@ -142,7 +137,7 @@ export default function AccountsReceivable({ data, today, onOpenInvoice }) {
           </table>
         </div>
       )}
-    </div>
+    </CollapsibleCard>
     </>
   )
 }

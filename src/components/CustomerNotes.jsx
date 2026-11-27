@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate } from '../lib/tickets.js'
+import { useCollapsed, CollapseButton } from './CollapsibleCard.jsx'
 
 // Dated running log on a customer profile (mini-CRM). Notes are added
 // right here — no Edit needed — newest first, each with its date and the
@@ -15,6 +16,9 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
   const [body, setBody] = useState('')
   const [adding, setAdding] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  // Minimize (Nov 27): header stays, the log hides with CSS — never
+  // unmounted, so a note being typed is not lost.
+  const { collapsed, toggle } = useCollapsed(userId, 'profile-notes')
 
   async function load() {
     if (!store.configured) { setLoading(false); return }
@@ -34,8 +38,13 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
   if (!store.configured) {
     return (
       <div className="ticket-section">
-        <h3 style={{ marginTop: 0 }}>Notes (0)</h3>
+        <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Notes (0)</span>
+          <CollapseButton collapsed={collapsed} onToggle={toggle} label="Customer notes" />
+        </h3>
+        <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
         <p className="muted">Notes are available when connected to the live database.</p>
+        </div>
       </div>
     )
   }
@@ -69,7 +78,11 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
 
   return (
     <div className="ticket-section">
-      <h3 style={{ marginTop: 0 }}>Notes ({notes.length})</h3>
+      <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Notes ({notes.length})</span>
+        <CollapseButton collapsed={collapsed} onToggle={toggle} label="Customer notes" />
+      </h3>
+      <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
       <div>
         <label>Add a note</label>
         <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="e.g. Called 11/19 — wants the upfit done before deer season…" />
@@ -104,6 +117,7 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
           )
         })
       )}
+      </div>
     </div>
   )
 }

@@ -327,6 +327,10 @@ tr:hover td { background: #fafafa; }
      backgrounds by default unless this is set). */
   .print-doc, .print-lines th, .print-lines td { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .card { border: 0; padding: 0; }
+  /* Collapsed sections (Nov 27): never hide content on paper, and the
+     minimize buttons themselves don't print. */
+  .collapse-body { display: block !important; }
+  .collapse-btn { display: none !important; }
   /* Strip the ticket form's screen tints if the form itself is printed. */
   .profile-wrap { background: #fff !important; border: 0 !important; padding: 0 !important; }
   .profile-duo { display: block !important; }

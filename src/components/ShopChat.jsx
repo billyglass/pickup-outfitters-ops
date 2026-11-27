@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
 import { localDayStr, chatDayLabel, chatTime, validateChatDraft, isOwnMessage, CHAT_MAX_LENGTH } from '../lib/tickets.js'
+import { useCollapsed, CollapseButton } from './CollapsibleCard.jsx'
 
 // Shop-wide message board on the dashboard, iMessage-style: own
 // messages on the right in blue, everyone else's on the left in gray
@@ -20,6 +21,10 @@ export default function ShopChat({ data, user, isAdmin, hasNewChat, onChatSeen }
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [visibleTick, setVisibleTick] = useState(0)
   const listRef = useRef(null)
+  // Minimize (Nov 27): the header stays, the messages hide with CSS —
+  // the component stays mounted, so the 20-second poll below keeps
+  // running while collapsed. Expanding re-scrolls to the bottom.
+  const { collapsed, toggle } = useCollapsed(user?.id, 'dashboard-chat')
 
   async function load() {
     try {
@@ -44,7 +49,7 @@ export default function ShopChat({ data, user, isAdmin, hasNewChat, onChatSeen }
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages])
+  }, [messages, collapsed])
 
   // New-message dot: mark the board seen so the dot clears. Only runs
   // while this component is mounted — i.e. while the dashboard tab is
@@ -120,7 +125,11 @@ export default function ShopChat({ data, user, isAdmin, hasNewChat, onChatSeen }
 
   return (
     <div className="card chat-card">
-      <h2 style={{ marginTop: 0 }}>Shop chat{hasNewChat && <span className="chat-dot" title="New message" />}</h2>
+      <div className="row-between">
+        <h2 style={{ marginTop: 0 }}>Shop chat{hasNewChat && <span className="chat-dot" title="New message" />}</h2>
+        <CollapseButton collapsed={collapsed} onToggle={toggle} label="Shop chat" />
+      </div>
+      <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
       <p className="muted small">Shop-wide board — everyone signed in can see and post here. No private messages.</p>
       {loading ? (
         <p className="muted">Loading messages…</p>
@@ -175,6 +184,7 @@ export default function ShopChat({ data, user, isAdmin, hasNewChat, onChatSeen }
           {error && <div className="error">{error}</div>}
         </>
       )}
+      </div>
     </div>
   )
 }

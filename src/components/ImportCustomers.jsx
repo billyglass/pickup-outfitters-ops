@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { parseCsv, rowsToObjects, downloadQbTemplate, QB_TEMPLATE_HEADERS, normalizePhone } from '../lib/csv.js'
 import { store } from '../lib/store.js'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // Admin-only QuickBooks customer CSV import.
 // Flow: download template -> export from QuickBooks -> upload here ->
 // preview + duplicate check -> select rows -> import. Nothing is imported
 // until the Admin confirms in the preview. No live QuickBooks API in Phase 1.
-export default function ImportCustomers({ existingCustomers, existingContacts, onImported }) {
+export default function ImportCustomers({ existingCustomers, existingContacts, userId, onImported }) {
   const [rows, setRows] = useState([])
   const [selected, setSelected] = useState({})
   const [error, setError] = useState('')
@@ -74,8 +75,7 @@ export default function ImportCustomers({ existingCustomers, existingContacts, o
   }
 
   return (
-    <div className="card">
-      <h2 style={{ marginTop: 0 }}>Import customers from QuickBooks (CSV)</h2>
+    <CollapsibleCard id="import-customers" userId={userId} title="Import customers from QuickBooks (CSV)" label="Import customers">
       <p className="muted">
         Admin only. Export customers from QuickBooks as a CSV, upload it here,
         review the preview, then import. Duplicates are flagged — they are
@@ -142,6 +142,6 @@ export default function ImportCustomers({ existingCustomers, existingContacts, o
           </div>
         </>
       )}
-    </div>
+    </CollapsibleCard>
   )
 }

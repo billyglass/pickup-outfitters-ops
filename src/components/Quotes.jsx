@@ -4,6 +4,7 @@ import { ageDays, duplicateTicket, ticketCustomerName, isWalkInTicket, customerT
 import TicketForm from './TicketForm.jsx'
 import TicketPrint from './TicketPrint.jsx'
 import ComboBox from './ComboBox.jsx'
+import CollapsibleCard from './CollapsibleCard.jsx'
 import SaveWalkInAsCustomer from './SaveWalkInAsCustomer.jsx'
 
 // Quotes have exactly two statuses: Open and Lost. Converting an Open
@@ -253,11 +254,7 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
   }
 
   return (
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Quotes — {view} ({filtered.length}){isAdmin ? <> · ${money(shownValue)}{view === 'Open' ? ' to go after' : ''}</> : ''}</h2>
-        <button className="btn" onClick={() => setEditing(null)}>+ New quote</button>
-      </div>
+    <CollapsibleCard id="quotes-list" userId={user?.id} title={<>Quotes — {view} ({filtered.length}){isAdmin ? <> · ${money(shownValue)}{view === 'Open' ? ' to go after' : ''}</> : ''}</>} label="Quotes list" headerExtra={<button className="btn" onClick={() => setEditing(null)}>+ New quote</button>}>
       <p className="muted small">Open quotes are the ones to go after — follow-up due and oldest first. Mark a quote Lost when the customer says no; reopen it anytime. Converting an Open quote to an invoice means you won it — it leaves this list and lives as an invoice. Quotes expire {settings?.quote_validity_days ?? 15} days after the issue date. Quotes and invoices have separate numbering — quotes QT-A1001…, invoices INV-1001… — so a quote and an invoice can share the same numeric part and still be different numbers.</p>
       {convertMsg && (
         <div className="success">
@@ -338,6 +335,6 @@ export default function Quotes({ data, user, profile, isAdmin, settings, onReloa
       </table>
       </div>
       {filtered.length === 0 && <p className="muted">No quotes match these filters.</p>}
-    </div>
+    </CollapsibleCard>
   )
 }

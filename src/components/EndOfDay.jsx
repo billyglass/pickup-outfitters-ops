@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate, money, roundCents, ticketCustomerName, salespersonNamesOf } from '../lib/tickets.js'
 import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory, calendarCells } from '../lib/endOfDay.js'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // End of day (Nov 25) — Bill's spreadsheet, in the app. Two parts:
 //   1. Collected today: one row per invoice with money collected on the
@@ -85,7 +86,7 @@ function CostInput({ value, onSave }) {
   )
 }
 
-export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice }) {
+export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpenInvoice }) {
   const [date, setDate] = useState(today)
   const [addedIds, setAddedIds] = useState([]) // invoices pulled in by number for this date
   const [costOverrides, setCostOverrides] = useState({}) // invoiceId -> cost, until App data reloads
@@ -221,11 +222,7 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
 
   return (
     <>
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>End of day — {fmtDate(date)}</h2>
-        <input type="date" value={date} onChange={(e) => changeDate(e.target.value)} aria-label="End of day date" />
-      </div>
+    <CollapsibleCard id="endofday-collected" userId={userId} title={<>End of day — {fmtDate(date)}</>} label="Collected today" headerExtra={<input type="date" value={date} onChange={(e) => changeDate(e.target.value)} aria-label="End of day date" />}>
       <p className="muted small">One row per invoice with money collected on this date. Sale, Labor, Tax and the rep fill in from the invoice — type in the Cost of the goods and Profit $ and % work themselves out. Cost is saved per invoice and never shows on the invoice itself.</p>
       {payError && <div className="error">{payError}</div>}
       {isAdmin && (
@@ -287,11 +284,8 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
         <button type="button" className="btn secondary" onClick={addInvoice}>Add invoice</button>
         {addMsg && <span className="muted small">{addMsg}</span>}
       </div>
-    </div>
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Sold today — {fmtDate(date)}</h2>
-      </div>
+    </CollapsibleCard>
+    <CollapsibleCard id="endofday-sold" userId={userId} title={<>Sold today — {fmtDate(date)}</>} label="Sold today">
       <p className="muted small">Invoices billed on this date — what was sold, separate from what was collected above. No typing here; it just adds up.</p>
       {sold.count === 0 ? (
         <p className="muted">Nothing billed on {fmtDate(date)} yet.</p>
@@ -309,11 +303,8 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
       ) : (
         <p>{sold.count} invoice{sold.count === 1 ? '' : 's'} billed on {fmtDate(date)}.</p>
       )}
-    </div>
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Past days</h2>
-      </div>
+    </CollapsibleCard>
+    <CollapsibleCard id="endofday-past-days" userId={userId} title="Past days" label="Past days">
       <p className="muted small">Every day with anything collected or billed — pick a date on the calendar or in the list below to load that day&apos;s sheet above. Good for checking historically whether a day like New Year&apos;s Eve was worth being open.</p>
       <div style={{ maxWidth: 420 }}>
         <div className="row-between" style={{ marginBottom: 4 }}>
@@ -384,7 +375,7 @@ export default function EndOfDay({ data, today, isAdmin, onReload, onOpenInvoice
           </table>
         </div>
       )}
-    </div>
+    </CollapsibleCard>
     </>
   )
 }

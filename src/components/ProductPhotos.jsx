@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { store } from '../lib/store.js'
+import { useCollapsed, CollapseButton } from './CollapsibleCard.jsx'
 
 // Photo gallery on a product/service record (shared catalog). Files live
 // in the private 'product-photos' Storage bucket and are shown via 1-hour
@@ -13,6 +14,9 @@ export default function ProductPhotos({ productId, userId }) {
   const [caption, setCaption] = useState('')
   const [uploading, setUploading] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  // Minimize (Nov 27): header stays, the gallery hides with CSS — never
+  // unmounted, so an in-progress upload is not lost.
+  const { collapsed, toggle } = useCollapsed(userId, 'product-photos')
 
   async function load() {
     if (!store.configured) { setLoading(false); return }
@@ -32,8 +36,13 @@ export default function ProductPhotos({ productId, userId }) {
   if (!store.configured) {
     return (
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Photos (0)</h3>
+        <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Photos (0)</span>
+          <CollapseButton collapsed={collapsed} onToggle={toggle} label="Product photos" />
+        </h3>
+        <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
         <p className="muted">Photos are available when connected to the live database.</p>
+        </div>
       </div>
     )
   }
@@ -70,7 +79,11 @@ export default function ProductPhotos({ productId, userId }) {
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Photos ({photos.length})</h3>
+      <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Photos ({photos.length})</span>
+        <CollapseButton collapsed={collapsed} onToggle={toggle} label="Product photos" />
+      </h3>
+      <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div>
           <label>Caption (optional — applies to this upload)</label>
@@ -113,6 +126,7 @@ export default function ProductPhotos({ productId, userId }) {
           ))}
         </div>
       )}
+      </div>
     </div>
   )
 }

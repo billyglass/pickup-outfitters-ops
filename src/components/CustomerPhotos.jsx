@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { store } from '../lib/store.js'
+import { useCollapsed, CollapseButton } from './CollapsibleCard.jsx'
 
 // Mini-CRM photo gallery on a customer profile. Files live in the private
 // 'customer-photos' Storage bucket and are shown via 1-hour signed URLs —
@@ -12,6 +13,9 @@ export default function CustomerPhotos({ customerId, userId }) {
   const [caption, setCaption] = useState('')
   const [uploading, setUploading] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  // Minimize (Nov 27): header stays, the gallery hides with CSS — never
+  // unmounted, so an in-progress upload is not lost.
+  const { collapsed, toggle } = useCollapsed(userId, 'profile-photos')
 
   async function load() {
     if (!store.configured) { setLoading(false); return }
@@ -31,8 +35,13 @@ export default function CustomerPhotos({ customerId, userId }) {
   if (!store.configured) {
     return (
       <div className="ticket-section">
-        <h3 style={{ marginTop: 0 }}>Photos (0)</h3>
+        <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Photos (0)</span>
+          <CollapseButton collapsed={collapsed} onToggle={toggle} label="Customer photos" />
+        </h3>
+        <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
         <p className="muted">Photos are available when connected to the live database.</p>
+        </div>
       </div>
     )
   }
@@ -69,7 +78,11 @@ export default function CustomerPhotos({ customerId, userId }) {
 
   return (
     <div className="ticket-section">
-      <h3 style={{ marginTop: 0 }}>Photos ({photos.length})</h3>
+      <h3 style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Photos ({photos.length})</span>
+        <CollapseButton collapsed={collapsed} onToggle={toggle} label="Customer photos" />
+      </h3>
+      <div className="collapse-body" style={collapsed ? { display: 'none' } : undefined}>
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div>
           <label>Caption (optional — applies to this upload)</label>
@@ -112,6 +125,7 @@ export default function CustomerPhotos({ customerId, userId }) {
           ))}
         </div>
       )}
+      </div>
     </div>
   )
 }

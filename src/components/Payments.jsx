@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate, money, roundCents, filterPayments, ticketCustomerName } from '../lib/tickets.js'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // Payments tab (Admin-only, Nov 24) — a separate area from the Invoices
 // tab, so Bill's wife can reconcile against QuickBooks. One page, every
@@ -12,7 +13,7 @@ import { fmtDate, money, roundCents, filterPayments, ticketCustomerName } from '
 // sees summed dollars anywhere else either).
 const METHODS = ['Cash', 'Check', 'Card', 'Other']
 
-export default function Payments({ data, onOpenInvoice }) {
+export default function Payments({ data, userId, onOpenInvoice }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -46,10 +47,7 @@ export default function Payments({ data, onOpenInvoice }) {
   const clearFilters = () => { setFrom(''); setTo(''); setMethod(''); setRecordedBy('') }
 
   return (
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Payments — {filtered.length}{filtered.length !== payments.length ? ` of ${payments.length}` : ''} · Collected in this view: ${money(collected)}</h2>
-      </div>
+    <CollapsibleCard id="payments-list" userId={userId} title={<>Payments — {filtered.length}{filtered.length !== payments.length ? ` of ${payments.length}` : ''} · Collected in this view: ${money(collected)}</>} label="Payments list">
       <p className="muted small">Every payment taken, newest first — for reconciling against QuickBooks. Payments are still recorded on the invoice itself; this list just shows them all in one place. Click an invoice number to open that invoice.</p>
       {error && <div className="error">{error}</div>}
       <div className="row filters" style={{ marginTop: 12 }}>
@@ -99,6 +97,6 @@ export default function Payments({ data, onOpenInvoice }) {
           </table>
         </div>
       )}
-    </div>
+    </CollapsibleCard>
   )
 }

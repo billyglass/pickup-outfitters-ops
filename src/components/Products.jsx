@@ -3,6 +3,7 @@ import { store } from '../lib/store.js'
 import { money } from '../lib/tickets.js'
 import ProductNotes from './ProductNotes.jsx'
 import ProductPhotos from './ProductPhotos.jsx'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // Shared products-and-services catalog (Nov 19, 2026 — Bill's decision):
 // EVERY active user (Sales + Admin) can view, add, edit, AND delete
@@ -74,14 +75,7 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
         <div className="row" style={{ marginBottom: 12 }}>
           <button className="btn secondary" type="button" onClick={() => { setSelected(null); setEditing(null) }}>← All products &amp; services</button>
         </div>
-        <div className="card">
-          <div className="row-between">
-            <h2 style={{ margin: 0 }}>{p.name} <span className="pill" style={{ marginLeft: 8 }}>{typeLabel(p.type)}</span></h2>
-            <div className="row">
-              <button className="btn" type="button" onClick={() => onAddToInvoice?.(p)}>Add to invoice</button>
-              <button className="btn secondary" type="button" onClick={() => startEdit(p)}>Edit</button>
-            </div>
-          </div>
+        <CollapsibleCard id="products-detail" userId={user?.id} title={<>{p.name} <span className="pill" style={{ marginLeft: 8 }}>{typeLabel(p.type)}</span></>} label="Product detail" headerExtra={<div className="row"><button className="btn" type="button" onClick={() => onAddToInvoice?.(p)}>Add to invoice</button><button className="btn secondary" type="button" onClick={() => startEdit(p)}>Edit</button></div>}>
           <div className="form-grid" style={{ marginTop: 12 }}>
             <div><label>Part number</label><div>{p.part_number || '—'}</div></div>
             <div><label>Sell price</label><div>${money(p.default_price)}</div></div>
@@ -91,7 +85,7 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
           </div>
           {p.description && <div style={{ marginTop: 12 }}><label>Description</label><div style={{ whiteSpace: 'pre-wrap' }}>{p.description}</div></div>}
           <p className="muted small" style={{ marginTop: 12 }}>“Add to invoice” opens a new Draft invoice with one line already filled in from this {typeLabel(p.type).toLowerCase()} — sell price, part number, and taxable flag — then you pick the customer and save.</p>
-        </div>
+        </CollapsibleCard>
         {editing && (
           <form className="card" onSubmit={save}>
             <h3 style={{ marginTop: 0 }}>Edit {typeLabel(form.type).toLowerCase()}</h3>
@@ -132,11 +126,7 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
 
   // --- List view ------------------------------------------------------------
   return (
-    <div className="card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Products &amp; services ({filtered.length})</h2>
-        <button className="btn" onClick={startNew}>+ New product / service</button>
-      </div>
+    <CollapsibleCard id="products-list" userId={user?.id} title={<>Products &amp; services ({filtered.length})</>} label="Products list" headerExtra={<button className="btn" onClick={startNew}>+ New product / service</button>}>
       <p className="muted small">Shared catalog — everyone can view, add, and edit products and services, including the cost, so any salesman can price a custom job when Bill isn&apos;t there. Click a row to see its notes and photos, or add it straight to a new invoice. To delete one, open it and use the delete button at the bottom of its edit form.</p>
       <div className="row filters" style={{ marginTop: 12 }}>
         <input value={fSearch} onChange={(e) => setFSearch(e.target.value)} placeholder="Search name, description, part number…" style={{ flex: '1 1 200px' }} />
@@ -182,6 +172,6 @@ export default function Products({ data, user, isAdmin, onReload, onError, onAdd
         </tbody>
       </table>
       {filtered.length === 0 && <p className="muted">No products or services match — add the ones you reuse, or just type custom lines on each ticket.</p>}
-    </div>
+    </CollapsibleCard>
   )
 }

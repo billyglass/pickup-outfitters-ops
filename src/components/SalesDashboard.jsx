@@ -15,6 +15,7 @@ import {
 } from '../lib/salesDashboard.js'
 import { ticketCustomerName, salespersonNamesOf, fmtDate } from '../lib/tickets.js'
 import { BarRow } from './AdminMetrics.jsx'
+import CollapsibleCard from './CollapsibleCard.jsx'
 
 // Same labels as Products.jsx TYPE_LABELS, kept local so this component
 // does not pull in the Products/store chain.
@@ -33,7 +34,7 @@ function TicketRow({ left, onView, onEdit }) {
   )
 }
 
-export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustomer, onOpenProducts }) {
+export default function SalesDashboard({ data, today, userId, onOpenTicket, onOpenCustomer, onOpenProducts }) {
   const m = useMemo(() => ({
     followUps: followUpsDue(data.quotes, today),
     expiring: expiringQuotes(data.quotes, today),
@@ -48,8 +49,7 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
 
   return (
     <div className="dash-grid">
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Follow-ups due ({m.followUps.length})</h2>
+      <CollapsibleCard id="sales-followups" userId={userId} title={<>Follow-ups due ({m.followUps.length})</>} label="Follow-ups due">
         <p className="muted small">Open quotes with a follow-up date of today or earlier — most overdue first.</p>
         {m.followUps.length === 0 && <p className="muted">No follow-ups due.</p>}
         {m.followUps.map((q) => (
@@ -60,10 +60,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             onEdit={() => onOpenTicket('quote', q.id, 'edit')}
           />
         ))}
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Expiring quotes ({m.expiring.length})</h2>
+      <CollapsibleCard id="sales-expiring" userId={userId} title={<>Expiring quotes ({m.expiring.length})</>} label="Expiring quotes">
         <p className="muted small">Open quotes expiring within 7 days, including ones already past.</p>
         {m.expiring.length === 0 && <p className="muted">No quotes expiring soon.</p>}
         {m.expiring.map((q) => (
@@ -74,10 +73,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             onEdit={() => onOpenTicket('quote', q.id, 'edit')}
           />
         ))}
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Drafts waiting ({m.drafts.length})</h2>
+      <CollapsibleCard id="sales-drafts" userId={userId} title={<>Drafts waiting ({m.drafts.length})</>} label="Drafts waiting">
         <p className="muted small">Invoices started but not issued yet — newest first.</p>
         {m.drafts.length === 0 && <p className="muted">No drafts waiting.</p>}
         {m.drafts.map((inv) => (
@@ -87,10 +85,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             onEdit={() => onOpenTicket('invoice', inv.id, 'edit')}
           />
         ))}
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Top products</h2>
+      <CollapsibleCard id="sales-top-products" userId={userId} title="Top products" label="Top products">
         <p className="muted small">Most-used catalog items across sold invoices, by units.</p>
         {m.products.length === 0 && <p className="muted">No sold lines yet.</p>}
         {m.products.map((p) => (
@@ -103,10 +100,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             max={maxUnits}
           />
         ))}
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Vehicles by make</h2>
+      <CollapsibleCard id="sales-makes" userId={userId} title="Vehicles by make" label="Vehicles by make">
         <p className="muted small">{m.makes.total} vehicle{m.makes.total === 1 ? '' : 's'} on file — all time.</p>
         {m.makes.makes.length === 0 && <p className="muted">No vehicles on file yet.</p>}
         {m.makes.makes.map((x) => (
@@ -118,10 +114,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             max={maxMake}
           />
         ))}
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>New in the catalog</h2>
+      <CollapsibleCard id="sales-new-catalog" userId={userId} title="New in the catalog" label="New in the catalog">
         <p className="muted small">The latest products and services added.</p>
         {m.fresh.length === 0 && <p className="muted">Nothing in the catalog yet.</p>}
         {m.fresh.map((p) => (
@@ -130,10 +125,9 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
           </div>
         ))}
         <button type="button" className="btn secondary small" style={{ marginTop: 8 }} onClick={onOpenProducts}>Browse products →</button>
-      </div>
+      </CollapsibleCard>
 
-      <div className="card">
-        <h2 style={{ margin: 0 }}>Customers to know about ({m.flagged.length})</h2>
+      <CollapsibleCard id="sales-flagged" userId={userId} title={<>Customers to know about ({m.flagged.length})</>} label="Customers to know about">
         <p className="muted small">Flagged customers — check the note before writing them up.</p>
         {m.flagged.length === 0 && <p className="muted">No flagged customers.</p>}
         {m.flagged.map((c) => (
@@ -145,7 +139,7 @@ export default function SalesDashboard({ data, today, onOpenTicket, onOpenCustom
             </span>
           </div>
         ))}
-      </div>
+      </CollapsibleCard>
     </div>
   )
 }
