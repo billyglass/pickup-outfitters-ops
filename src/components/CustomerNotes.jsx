@@ -99,7 +99,7 @@ export default function CustomerNotes({ customerId, userId, profiles }) {
         notes.map((n) => {
           const author = (profiles || []).find((p) => p.id === n.created_by)?.name
           return (
-            <div key={n.id} style={{ borderTop: '1px solid #eee', padding: '10px 0' }}>
+            <div key={n.id} className="zebra-row" style={{ borderTop: '1px solid #eee', padding: '10px 0' }}>
               <div className="row-between">
                 <span className="muted small"><strong>{fmtDate(n.created_at)}</strong>{author ? ` · ${author}` : ''}</span>
                 {confirmDeleteId === n.id ? (

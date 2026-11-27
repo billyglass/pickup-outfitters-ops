@@ -199,7 +199,7 @@ export default function InvoicePayments({ invoice, isAdmin, userId, readOnly, on
         <p className="muted">No payments recorded yet.</p>
       ) : (
         payments.map((p) => (
-          <div key={p.id} style={{ borderTop: '1px solid #eee', padding: '10px 0' }}>
+          <div key={p.id} className="zebra-row" style={{ borderTop: '1px solid #eee', padding: '10px 0' }}>
             <div className="row-between">
               <span><strong>{fmtDate(p.payment_date)}</strong> · ${money(p.amount)} · {p.method || '—'}{p.reference ? ` · #${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}</span>
               {isAdmin && !readOnly ? (

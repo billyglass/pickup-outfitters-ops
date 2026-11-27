@@ -72,13 +72,19 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 table.list td.customer { max-width: 240px; }
 table.list td.vehicle { white-space: nowrap; }
 table.list td .sub { white-space: nowrap; }
-/* List tables (Nov 25 cleanup): once the loud buttons went quiet the rows
-   ran together as one white sheet — alternating row tints and a slightly
-   stronger row border give each row its own band, and a light header
-   anchors the columns. */
-table.list tbody tr:nth-child(even) td { background: #f7f6f3; }
-table.list th, table.list td { border-bottom-color: #e3e1dc; }
-table.list thead th { background: #f2f1ed; }
+/* Zebra rows are the standard for every list in the program (Nov 27) —
+   the Invoices/Quotes highlight, now on every table and every list row,
+   so a row is easy to follow across. The printed ticket's tables are
+   excluded — they have their own print styling (the lines table already
+   has its print zebra) and print stays exactly as approved. */
+table:not(.print-lines):not(.print-meta):not(.print-totals) tbody tr:nth-child(even) td { background: #f7f6f3; }
+table:not(.print-lines):not(.print-meta):not(.print-totals) th, table:not(.print-lines):not(.print-meta):not(.print-totals) td { border-bottom-color: #e3e1dc; }
+table:not(.print-lines):not(.print-meta):not(.print-totals) thead th { background: #f2f1ed; }
+/* Div-based list rows (search results, dashboard rows, profile history,
+   notes, payment history): the same alternating tint. :nth-of-type
+   counts only divs, so a heading or intro paragraph above the rows does
+   not shift the pattern — the first row stays white, like the tables. */
+.result-row:nth-of-type(even), .zebra-row:nth-of-type(even) { background: #f7f6f3; }
 /* Row actions stay on one line, compact buttons. */
 .row.actions { flex-wrap: nowrap; gap: 6px; }
 .btn.small { padding: 6px 10px; font-size: 13px; }

@@ -553,7 +553,7 @@ export default function App() {
               <p className="muted small">Invoices created today — newest first. View shows the print version; Edit opens the form.</p>
               {todaysInvoices.length === 0 && <p className="muted">No invoices created today yet.</p>}
               {todaysInvoices.map((t) => (
-                <div key={`invoice-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <div key={`invoice-${t.id}`} className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                   <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
                   <span>
                     <button className="btn small" onClick={() => openTicket('invoice', t.id, 'view')}>View</button>{' '}
@@ -566,7 +566,7 @@ export default function App() {
               <p className="muted small">Quotes created today — newest first. View shows the print version; Edit opens the form.</p>
               {todaysQuotes.length === 0 && <p className="muted">No quotes created today yet.</p>}
               {todaysQuotes.map((t) => (
-                <div key={`quote-${t.id}`} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <div key={`quote-${t.id}`} className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                   <span><strong>{ticketCustomerName(t, data.customers)}</strong> · {t.number} · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · ${money(t.total)}</span>
                   <span>
                     <button className="btn small" onClick={() => openTicket('quote', t.id, 'view')}>View</button>{' '}
@@ -579,7 +579,7 @@ export default function App() {
               <p className="muted small">Follow-up due first, then oldest — the ones waiting longest get chased first.</p>
               {chaseQuotes.length === 0 && <p className="muted">No open quotes. Nothing to chase.</p>}
               {chaseQuotes.slice(0, 8).map((q) => (
-                <div key={q.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+                <div key={q.id} className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
                   <span><strong>{ticketCustomerName(q, data.customers)}</strong> · {q.number} · {salespersonNamesOf(q, data.profiles)} · {q.follow_up_on ? `follow up ${fmtDate(q.follow_up_on)}` : `opened ${fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))}`} · ${money(q.total)}</span>
                   <span>
                     <button className="btn small" onClick={() => openTicket('quote', q.id, 'view')}>View</button>{' '}
@@ -750,7 +750,7 @@ export default function App() {
                   </h3>
                   <div className="collapse-body" style={collapsedProfileInvoices ? { display: 'none' } : undefined}>
                   {(showAllProfileInvoices ? profileInvoices : profileInvoices.slice(0, 5)).map((t) => (
-                    <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                    <div key={t.id} className="row-between zebra-row" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
                       {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
                       <span>
@@ -776,7 +776,7 @@ export default function App() {
                   </h3>
                   <div className="collapse-body" style={collapsedProfileVehicles ? { display: 'none' } : undefined}>
                   {(showAllProfileVehicles ? profileVehicles : profileVehicles.slice(0, 5)).map((v) => (
-                    <div key={v.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                    <div key={v.id} className="row-between zebra-row" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{v.year || ''} {v.make || ''} {v.model || ''}{v.bed_size ? ` · ${v.bed_size}` : ''}</strong> · VIN {v.vin || '—'} · Unit {v.fleet_unit || '—'}{v.color ? ` · ${v.color}` : ''}</span>
                       <button className="btn secondary small" onClick={() => { setEditingVehicle(v); setTab('vehicles') }}>Edit</button>
                     </div>
@@ -798,7 +798,7 @@ export default function App() {
                   </h3>
                   <div className="collapse-body" style={collapsedProfileQuotes ? { display: 'none' } : undefined}>
                   {(showAllProfileQuotes ? profileQuotes : profileQuotes.slice(0, 5)).map((t) => (
-                    <div key={t.id} className="row-between" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
+                    <div key={t.id} className="row-between zebra-row" style={{ borderTop: '1px solid #f0e8de', padding: '8px 0' }}>
                       <span><strong>{t.number}</strong> · {displayInvoiceStatus(t.status)} · {salespersonNamesOf(t, data.profiles)} · {fmtDate(t.issue_date || (t.created_at || '').slice(0, 10))} · ${money(t.total)}
                       {t.vehicle_snapshot?.vin ? <span className="muted small"> · VIN {t.vehicle_snapshot.vin}</span> : ''}</span>
                       <span>
@@ -910,7 +910,7 @@ export default function App() {
                                 <h4 style={{ margin: '8px 0 4px' }}>Invoices ({vInvoices.length})</h4>
                                 {vInvoices.length === 0 && <p className="muted">No invoices tied to this vehicle yet.</p>}
                                 {vInvoices.map((inv) => (
-                                  <div key={inv.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
+                                  <div key={inv.id} className="zebra-row" style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
                                     <button type="button" onClick={() => openInvoice(inv)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{inv.number}</button>
                                     {' '}· {displayInvoiceStatus(inv.status)} · {fmtDate(inv.issue_date || (inv.created_at || '').slice(0, 10))} · {ticketCustomerName(inv, data.customers)} · ${money(inv.total)}
                                   </div>
@@ -918,7 +918,7 @@ export default function App() {
                                 <h4 style={{ margin: '12px 0 4px' }}>Quotes ({vQuotes.length})</h4>
                                 {vQuotes.length === 0 && <p className="muted">No quotes tied to this vehicle yet.</p>}
                                 {vQuotes.map((q) => (
-                                  <div key={q.id} style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
+                                  <div key={q.id} className="zebra-row" style={{ borderTop: '1px solid #eee', padding: '6px 0' }}>
                                     <button type="button" onClick={() => openQuote(q)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>{q.number}</button>
                                     {' '}· {q.status} · {fmtDate(q.issue_date || (q.created_at || '').slice(0, 10))} · {ticketCustomerName(q, data.customers)} · ${money(q.total)}
                                   </div>

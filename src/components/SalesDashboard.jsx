@@ -24,7 +24,7 @@ const typeLabel = (t) => TYPE_LABELS[t] || 'Product'
 
 function TicketRow({ left, onView, onEdit }) {
   return (
-    <div className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+    <div className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
       <span>{left}</span>
       <span>
         {onView && <><button className="btn small" onClick={onView}>View</button>{' '}</>}
@@ -120,7 +120,7 @@ export default function SalesDashboard({ data, today, userId, onOpenTicket, onOp
         <p className="muted small">The latest products and services added.</p>
         {m.fresh.length === 0 && <p className="muted">Nothing in the catalog yet.</p>}
         {m.fresh.map((p) => (
-          <div key={p.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+          <div key={p.id} className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
             <span><strong>{p.name}</strong> <span className="pill">{typeLabel(p.type)}</span></span>
           </div>
         ))}
@@ -131,7 +131,7 @@ export default function SalesDashboard({ data, today, userId, onOpenTicket, onOp
         <p className="muted small">Flagged customers — check the note before writing them up.</p>
         {m.flagged.length === 0 && <p className="muted">No flagged customers.</p>}
         {m.flagged.map((c) => (
-          <div key={c.id} className="row-between" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
+          <div key={c.id} className="row-between zebra-row" style={{ borderTop: '1px solid #eee', padding: '8px 0' }}>
             <span>
               <button type="button" className="metric-link" onClick={() => onOpenCustomer(c.id)} title="Open customer profile"><strong>{c.company}</strong></button>
               {' '}<span className="flag-pill">{c.flag}</span>
