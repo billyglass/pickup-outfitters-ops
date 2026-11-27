@@ -5,7 +5,7 @@ import { store, globalSearch } from './lib/store.js'
 import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
-import { peopleRows, peopleMatchesFilter, companyMatchesFilter, primaryContact, openInvoicesSummary, readCustomersViewMap, writeCustomersViewMap, getCustomersView, withCustomersView } from './lib/crm.js'
+import { peopleRows, peopleMatchesFilter, companyMatchesFilter, primaryContact, openInvoicesSummary, sortCompaniesAlpha, sortPeopleAlpha, readCustomersViewMap, writeCustomersViewMap, getCustomersView, withCustomersView } from './lib/crm.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import CustomerNotes from './components/CustomerNotes.jsx'
@@ -69,6 +69,10 @@ export default function App() {
   // Companies filter, so switching views keeps each filter).
   const [customersView, setCustomersView] = useState('companies') // 'companies' | 'people'
   const [peopleFilter, setPeopleFilter] = useState('')
+  // Alphabetical sort (Nov 27): both views sort A–Z by default; clicking
+  // the Company / Name header flips to Z–A.
+  const [companySortDir, setCompanySortDir] = useState('asc') // 'asc' | 'desc'
+  const [peopleSortDir, setPeopleSortDir] = useState('asc') // 'asc' | 'desc'
   // Contact to spotlight in the profile's Contacts list — set only when
   // opening a company from the People view, so Bill lands on the right
   // person. Cleared by openCustomerProfile whenever a profile is opened
@@ -410,17 +414,17 @@ export default function App() {
   // Primary contact column.
   const contactsByCustomer = {}
   for (const ct of data.contacts) { (contactsByCustomer[ct.customer_id] ||= []).push(ct) }
-  const customers = data.customers.filter((c) =>
+  const customers = sortCompaniesAlpha(data.customers.filter((c) =>
     (!customerTypeFilter || customerTypeOf(c) === customerTypeFilter) &&
     (!customerFilter.trim() || companyMatchesFilter(c, contactsByCustomer[c.id] || [], customerFilter))
-  )
+  ), companySortDir)
   // People view: one row per contact, A–Z. The type filter applies by
   // the person's company; the text filter is the People search box.
   // Toggle counts are type-filtered only (no text filter), so the toggle
   // says how many of each exist in the current Retail/Fleet scope.
   const companiesTypeFiltered = data.customers.filter((c) => !customerTypeFilter || customerTypeOf(c) === customerTypeFilter)
   const peopleTypeFiltered = peopleRows(data.customers, data.contacts).filter((r) => !customerTypeFilter || customerTypeOf(r.company) === customerTypeFilter)
-  const people = peopleTypeFiltered.filter((r) => !peopleFilter.trim() || peopleMatchesFilter(r, peopleFilter))
+  const people = sortPeopleAlpha(peopleTypeFiltered.filter((r) => !peopleFilter.trim() || peopleMatchesFilter(r, peopleFilter)), peopleSortDir)
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
     if (!q) return true
@@ -880,7 +884,7 @@ export default function App() {
                   <>
                     <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter by company, contact, or phone…" style={{ marginTop: 12 }} />
                     <table>
-                      <thead><tr><th>Company</th><th>Type</th><th>Terms</th><th>Tax</th><th>Primary contact</th><th>Vehicles</th><th>Open invoices</th><th></th></tr></thead>
+                      <thead><tr><th onClick={() => setCompanySortDir(companySortDir === 'asc' ? 'desc' : 'asc')} style={{ cursor: 'pointer' }} title="Sort alphabetically">Company {companySortDir === 'asc' ? '▲' : '▼'}</th><th>Type</th><th>Terms</th><th>Tax</th><th>Primary contact</th><th>Vehicles</th><th>Open invoices</th><th></th></tr></thead>
                       <tbody>
                         {customers.map((c) => {
                           const pc = primaryContact(contactsByCustomer[c.id] || [])
@@ -906,7 +910,7 @@ export default function App() {
                   <>
                     <input value={peopleFilter} onChange={(e) => setPeopleFilter(e.target.value)} placeholder="Filter by name, title, company, phone, or email…" style={{ marginTop: 12 }} />
                     <table>
-                      <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Phone</th><th>Email</th><th></th></tr></thead>
+                      <thead><tr><th onClick={() => setPeopleSortDir(peopleSortDir === 'asc' ? 'desc' : 'asc')} style={{ cursor: 'pointer' }} title="Sort alphabetically">Name {peopleSortDir === 'asc' ? '▲' : '▼'}</th><th>Title</th><th>Company</th><th>Phone</th><th>Email</th><th></th></tr></thead>
                       <tbody>
                         {people.map((r) => (
                           <tr key={r.contact.id}>

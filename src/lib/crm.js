@@ -60,14 +60,33 @@ export function primaryContact(contacts) {
   return list.find((c) => c.is_primary) || list[0] || null
 }
 
+// --- Alphabetical sorting (Nov 27) ---
+// Both views sort A–Z by default; clicking the Company / Name column
+// header flips to Z–A. localeCompare orders by the letters first (so
+// 'apple' sorts before 'Banana') and only uses case to break an exact
+// letter tie. A missing name sorts first in A–Z and last in Z–A.
+export function alphaCompare(a, b) {
+  return String(a || '').localeCompare(String(b || ''))
+}
+
+export function sortCompaniesAlpha(companies, dir = 'asc') {
+  const sorted = [...(companies || [])].sort((a, b) => alphaCompare(a.company, b.company))
+  return dir === 'desc' ? sorted.reverse() : sorted
+}
+
+export function sortPeopleAlpha(rows, dir = 'asc') {
+  const sorted = [...(rows || [])].sort((a, b) =>
+    alphaCompare(a.contact?.name, b.contact?.name) || alphaCompare(a.company?.company, b.company?.company))
+  return dir === 'desc' ? sorted.reverse() : sorted
+}
+
 // One row per person, A–Z by name. A contact whose company isn't in the
 // list is skipped — a People row must be able to open its company.
 export function peopleRows(customers, contacts) {
   const byId = new Map((customers || []).map((c) => [c.id, c]))
-  return (contacts || [])
+  return sortPeopleAlpha((contacts || [])
     .filter((ct) => ct && byId.has(ct.customer_id))
-    .map((ct) => ({ contact: ct, company: byId.get(ct.customer_id) }))
-    .sort((a, b) => String(a.contact.name || '').localeCompare(String(b.contact.name || '')))
+    .map((ct) => ({ contact: ct, company: byId.get(ct.customer_id) })))
 }
 
 // People filter: name, title, company, email (plain text), phone
