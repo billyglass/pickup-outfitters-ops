@@ -3,6 +3,7 @@ import { normalizeVin, normalizePhone } from './csv.js'
 import { computeTotals, cleanLinePayload, lineTotal, roundCents, invoiceDatesOnSave, invoiceBillingDates, todayStr, resolveVehicleUpsert, vehicleSnapshotFromFields, ticketCustomerName, isWalkInTicket, customerSnapshot, customerTypeOf, findCustomerByPhoneOrEmail, deriveInvoiceBalance } from './tickets.js'
 import { titleCaseName } from './names.js'
 import { formatPhone, phoneMatches } from './phones.js'
+import { unclosedAddedDays } from './endOfDay.js'
 
 // Data layer. Two backends behind one API (same pattern as the tracker):
 //   - Supabase (when env vars are set): shared Postgres, RLS enforced.
@@ -14,6 +15,8 @@ const LS_PRODUCT_NOTES = 'po_ops_product_notes_v1'
 const LS_SHOP_MESSAGES = 'po_ops_shop_messages_v1'
 const LS_CHAT_SEEN = 'po_ops_chat_seen_v1'
 const LS_INVOICE_PAYMENTS = 'po_ops_invoice_payments_v1'
+const LS_EOD_ADDED = 'po_ops_eod_added_v1'
+const LS_EOD_CLOSES = 'po_ops_eod_closes_v1'
 const LS_VEHICLES = 'po_ops_vehicles_v1'
 
 export class VersionConflict extends Error {
@@ -676,6 +679,188 @@ function localSetInvoiceCost(invoiceId, cost) {
   }
   lsWrite(LS_INVOICES, rows)
   return rows[idx]
+}
+
+// --- End of day added invoices + day closes (migration 026) ---
+// Pre-migration the tables do not exist yet: PostgREST answers 42P01
+// ("Could not find the table"). Reads fail soft to empty (the sheet
+// just starts with no added invoices, as before); writes rethrow a
+// friendly "not ready yet" error the End of day tab catches, so an add
+// still works in-memory for the moment instead of crashing the page.
+const EOD_NOT_READY = "End-of-day saving isn't ready yet — the update is still deploying."
+function isNotReadyError(err) {
+  if (!err) return false
+  if (err.code === 'PGRST204' || err.code === '42P01') return true
+  return /could not find the table/i.test(err.message || '')
+}
+function notReadyError() {
+  const e = new Error(EOD_NOT_READY)
+  e.notReady = true
+  return e
+}
+
+async function sbListEndOfDayAdded(day) {
+  try {
+    const { data, error } = await supabase.from('end_of_day_added')
+      .select('invoice_id').eq('day', day).order('created_at', { ascending: true })
+    if (error) throw error
+    return (data || []).map((r) => r.invoice_id)
+  } catch (err) {
+    if (isNotReadyError(err)) return []
+    throw err
+  }
+}
+
+async function sbAddEndOfDayInvoice(day, invoiceId, userId) {
+  try {
+    // Adding to a closed day reopens it — delete the close record first
+    // so a failed add can never leave the day half-reopened.
+    const { error: reopenErr } = await supabase.from('end_of_day_closes').delete().eq('day', day)
+    if (reopenErr) throw reopenErr
+    const { data, error } = await supabase.from('end_of_day_added')
+      .upsert({ day, invoice_id: invoiceId, added_by: userId || null }, { onConflict: 'day,invoice_id' })
+      .select().single()
+    if (error) throw error
+    return data
+  } catch (err) {
+    if (isNotReadyError(err)) throw notReadyError()
+    throw err
+  }
+}
+
+async function sbRemoveEndOfDayInvoice(day, invoiceId) {
+  try {
+    const { error } = await supabase.from('end_of_day_added')
+      .delete().eq('day', day).eq('invoice_id', invoiceId)
+    if (error) throw error
+  } catch (err) {
+    if (isNotReadyError(err)) throw notReadyError()
+    throw err
+  }
+}
+
+async function sbGetEndOfDayClose(day) {
+  try {
+    const { data, error } = await supabase.from('end_of_day_closes')
+      .select('day, closed_by, closed_at').eq('day', day).maybeSingle()
+    if (error) throw error
+    return data || null
+  } catch (err) {
+    if (isNotReadyError(err)) return null
+    throw err
+  }
+}
+
+async function sbListEndOfDayCloses() {
+  try {
+    const { data, error } = await supabase.from('end_of_day_closes')
+      .select('day, closed_by, closed_at').order('day', { ascending: false }).limit(200)
+    if (error) throw error
+    return data || []
+  } catch (err) {
+    if (isNotReadyError(err)) return []
+    throw err
+  }
+}
+
+async function sbCloseEndOfDay(day, userId) {
+  try {
+    // Closing only ever touches the added-invoice list and the close
+    // record — payments, costs, and invoices are never deleted or
+    // changed by closing a day.
+    const { error: delErr } = await supabase.from('end_of_day_added').delete().eq('day', day)
+    if (delErr) throw delErr
+    const { data, error } = await supabase.from('end_of_day_closes')
+      .upsert({ day, closed_by: userId || null, closed_at: new Date().toISOString() }, { onConflict: 'day' })
+      .select().single()
+    if (error) throw error
+    return data
+  } catch (err) {
+    if (isNotReadyError(err)) throw notReadyError()
+    throw err
+  }
+}
+
+async function sbReopenEndOfDay(day) {
+  try {
+    const { error } = await supabase.from('end_of_day_closes').delete().eq('day', day)
+    if (error) throw error
+  } catch (err) {
+    if (isNotReadyError(err)) throw notReadyError()
+    throw err
+  }
+}
+
+async function sbAutoClosePastDays(today) {
+  try {
+    const { data: added, error } = await supabase.from('end_of_day_added')
+      .select('day').lt('day', today)
+    if (error) throw error
+    const addedDays = [...new Set((added || []).map((r) => r.day))]
+    if (!addedDays.length) return []
+    const { data: closes, error: cErr } = await supabase.from('end_of_day_closes')
+      .select('day').in('day', addedDays)
+    if (cErr) throw cErr
+    const open = unclosedAddedDays(addedDays, (closes || []).map((r) => r.day), today)
+    for (const d of open) {
+      await supabase.from('end_of_day_added').delete().eq('day', d)
+      await supabase.from('end_of_day_closes')
+        .upsert({ day: d, closed_by: null }, { onConflict: 'day' })
+    }
+    return open
+  } catch (err) {
+    if (isNotReadyError(err)) return []
+    throw err
+  }
+}
+
+function localListEndOfDayAdded(day) {
+  return lsRead(LS_EOD_ADDED, []).filter((r) => r.day === day).map((r) => r.invoice_id)
+}
+
+function localAddEndOfDayInvoice(day, invoiceId, userId) {
+  lsWrite(LS_EOD_CLOSES, lsRead(LS_EOD_CLOSES, []).filter((r) => r.day !== day))
+  const rows = lsRead(LS_EOD_ADDED, [])
+  const existing = rows.find((r) => r.day === day && r.invoice_id === invoiceId)
+  if (existing) return existing
+  const row = { id: uid(), day, invoice_id: invoiceId, added_by: userId || null, created_at: new Date().toISOString() }
+  lsWrite(LS_EOD_ADDED, [...rows, row])
+  return row
+}
+
+function localRemoveEndOfDayInvoice(day, invoiceId) {
+  lsWrite(LS_EOD_ADDED, lsRead(LS_EOD_ADDED, []).filter((r) => !(r.day === day && r.invoice_id === invoiceId)))
+}
+
+function localGetEndOfDayClose(day) {
+  return lsRead(LS_EOD_CLOSES, []).find((r) => r.day === day) || null
+}
+
+function localListEndOfDayCloses() {
+  return [...lsRead(LS_EOD_CLOSES, [])].sort((a, b) => String(b.day).localeCompare(String(a.day))).slice(0, 200)
+}
+
+function localCloseEndOfDay(day, userId) {
+  lsWrite(LS_EOD_ADDED, lsRead(LS_EOD_ADDED, []).filter((r) => r.day !== day))
+  const rec = { day, closed_by: userId || null, closed_at: new Date().toISOString() }
+  lsWrite(LS_EOD_CLOSES, [...lsRead(LS_EOD_CLOSES, []).filter((r) => r.day !== day), rec])
+  return rec
+}
+
+function localReopenEndOfDay(day) {
+  lsWrite(LS_EOD_CLOSES, lsRead(LS_EOD_CLOSES, []).filter((r) => r.day !== day))
+}
+
+function localAutoClosePastDays(today) {
+  const rows = lsRead(LS_EOD_ADDED, [])
+  const addedDays = [...new Set(rows.map((r) => r.day))]
+  const closes = lsRead(LS_EOD_CLOSES, [])
+  const open = unclosedAddedDays(addedDays, closes.map((r) => r.day), today)
+  if (!open.length) return []
+  const now = new Date().toISOString()
+  lsWrite(LS_EOD_ADDED, rows.filter((r) => !open.includes(r.day)))
+  lsWrite(LS_EOD_CLOSES, [...closes, ...open.map((d) => ({ day: d, closed_by: null, closed_at: now }))])
+  return open
 }
 
 async function sbConvertQuoteToInvoice(quote, quoteLines, userId, state) {
@@ -2101,6 +2286,55 @@ export const store = {
   async setInvoiceCost(invoiceId, cost) {
     if (!supabaseConfigured) return localSetInvoiceCost(invoiceId, cost)
     return sbSetInvoiceCost(invoiceId, cost)
+  },
+
+  // --- End of day: added invoices that stick all day (Nov 27) ---
+  // A manually added invoice persists per day in the DB (migration 026)
+  // instead of React state, so it survives refreshes and tab switches
+  // until the day is closed out — by the Close day button, or on its
+  // own when the tab next loads on a later day. Local mode keeps them
+  // in localStorage.
+  async listEndOfDayAdded(day) {
+    if (!supabaseConfigured) return localListEndOfDayAdded(day)
+    return sbListEndOfDayAdded(day)
+  },
+
+  async addEndOfDayInvoice(day, invoiceId, userId) {
+    if (!supabaseConfigured) return localAddEndOfDayInvoice(day, invoiceId, userId)
+    return sbAddEndOfDayInvoice(day, invoiceId, userId)
+  },
+
+  async removeEndOfDayInvoice(day, invoiceId) {
+    if (!supabaseConfigured) return localRemoveEndOfDayInvoice(day, invoiceId)
+    return sbRemoveEndOfDayInvoice(day, invoiceId)
+  },
+
+  async getEndOfDayClose(day) {
+    if (!supabaseConfigured) return localGetEndOfDayClose(day)
+    return sbGetEndOfDayClose(day)
+  },
+
+  async listEndOfDayCloses() {
+    if (!supabaseConfigured) return localListEndOfDayCloses()
+    return sbListEndOfDayCloses()
+  },
+
+  async closeEndOfDay(day, userId) {
+    if (!supabaseConfigured) return localCloseEndOfDay(day, userId)
+    return sbCloseEndOfDay(day, userId)
+  },
+
+  async reopenEndOfDay(day) {
+    if (!supabaseConfigured) return localReopenEndOfDay(day)
+    return sbReopenEndOfDay(day)
+  },
+
+  // Close out every past day left open — returns the days it closed.
+  // Best-effort: returns [] pre-migration (026 not run yet) instead of
+  // throwing, so the tab load never breaks on it.
+  async autoClosePastDays(today) {
+    if (!supabaseConfigured) return localAutoClosePastDays(today)
+    return sbAutoClosePastDays(today)
   },
 
   async convertQuoteToInvoice(quote, quoteLines, userId, state) {

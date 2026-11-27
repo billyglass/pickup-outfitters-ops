@@ -653,6 +653,30 @@ create index if not exists shop_messages_created_idx
   on public.shop_messages (created_at desc);
 
 -- ---------------------------------------------------------------------------
+-- end_of_day_added / end_of_day_closes — End of day sheet (migration 026).
+-- Invoices added by number stick to the day in the DB until the day is
+-- closed out; a close record marks the day done (closed_by NULL = the
+-- day closed itself at end of day). Closing only ever touches these two
+-- tables — payments, costs, and invoices are never changed by closing.
+-- ---------------------------------------------------------------------------
+create table if not exists public.end_of_day_added (
+  id uuid primary key default gen_random_uuid(),
+  day date not null,
+  invoice_id uuid not null references public.invoices (id) on delete cascade,
+  added_by uuid,
+  created_at timestamptz not null default now(),
+  unique (day, invoice_id)
+);
+create index if not exists end_of_day_added_day_idx
+  on public.end_of_day_added (day);
+
+create table if not exists public.end_of_day_closes (
+  day date primary key,
+  closed_by uuid,
+  closed_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- product_photos — one row per photo on a product/service record (shared
 -- catalog, migration 017). File bytes live in the private 'product-photos'
 -- Storage bucket; the app serves 1-hour signed URLs. Deleting the product
@@ -910,6 +934,8 @@ alter table public.customer_notes enable row level security;
 alter table public.product_notes enable row level security;
 alter table public.product_photos enable row level security;
 alter table public.shop_messages enable row level security;
+alter table public.end_of_day_added enable row level security;
+alter table public.end_of_day_closes enable row level security;
 
 -- profiles: every ACTIVE user can read all profiles (Sales need the full
 -- list for the salesperson picker on tickets and the salesperson filters
@@ -1240,6 +1266,29 @@ create policy "shop_messages insert active" on public.shop_messages for insert
 drop policy if exists "shop_messages delete own or admin" on public.shop_messages;
 create policy "shop_messages delete own or admin" on public.shop_messages for delete
   using (auth.uid() = author_id or public.is_admin());
+
+-- end_of_day_added / end_of_day_closes (migration 026): any active user
+-- can read, add, remove, close, and reopen — whoever is closing that
+-- day does it. No update policy (rows are added or removed, never
+-- edited).
+drop policy if exists "end_of_day_added read active" on public.end_of_day_added;
+create policy "end_of_day_added read active" on public.end_of_day_added for select
+  using (public.is_active_user());
+drop policy if exists "end_of_day_added insert active" on public.end_of_day_added;
+create policy "end_of_day_added insert active" on public.end_of_day_added for insert
+  with check (public.is_active_user());
+drop policy if exists "end_of_day_added delete active" on public.end_of_day_added;
+create policy "end_of_day_added delete active" on public.end_of_day_added for delete
+  using (public.is_active_user());
+drop policy if exists "end_of_day_closes read active" on public.end_of_day_closes;
+create policy "end_of_day_closes read active" on public.end_of_day_closes for select
+  using (public.is_active_user());
+drop policy if exists "end_of_day_closes insert active" on public.end_of_day_closes;
+create policy "end_of_day_closes insert active" on public.end_of_day_closes for insert
+  with check (public.is_active_user());
+drop policy if exists "end_of_day_closes delete active" on public.end_of_day_closes;
+create policy "end_of_day_closes delete active" on public.end_of_day_closes for delete
+  using (public.is_active_user());
 
 -- Private storage bucket for customer photos + its object policies.
 -- The bucket stays private — the app serves 1-hour signed URLs, never

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { store } from '../lib/store.js'
 import { fmtDate, money, roundCents, ticketCustomerName, salespersonNamesOf } from '../lib/tickets.js'
-import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory, calendarCells } from '../lib/endOfDay.js'
+import { invoiceSaleFigures, profitFor, collectRowsForDate, cashCollectedOn, findInvoiceByNumber, billedOnDate, soldSummary, collectedTotals, dayHistory, calendarCells, closeLine } from '../lib/endOfDay.js'
 import CollapsibleCard from './CollapsibleCard.jsx'
 
 // End of day (Nov 25) — Bill's spreadsheet, in the app. Two parts:
@@ -14,6 +14,14 @@ import CollapsibleCard from './CollapsibleCard.jsx'
 //      separate from what was collected. No typing.
 // Cost lives per invoice (invoices.cost_of_goods, migration 025) and is
 // entered ONLY here — never on the invoice form, lists, print, or search.
+//
+// ADDED INVOICES STICK (Nov 27): an invoice pulled in by number is saved
+// to that day in the DB (migration 026), so it stays on the sheet all
+// day and survives refreshes and tab switches. It comes off when the day
+// is closed — by the Close day button, or on its own the next time the
+// tab loads on a later day (auto-close). Closing only ever touches the
+// added-invoice list and the close record; payments, costs, and invoices
+// are never deleted or changed by closing.
 //
 // ACCESS (Bill's explicit decision, Nov 25): the tab is open to every
 // active user — whoever is closing that day fills it out, and the day's
@@ -95,6 +103,12 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
   const [payError, setPayError] = useState('')
   const [addText, setAddText] = useState('')
   const [addMsg, setAddMsg] = useState('')
+  const [closeRec, setCloseRec] = useState(null) // close record for the selected date, if closed
+  const [closes, setCloses] = useState([]) // all close records, for the Past days markers
+  const [closeMsg, setCloseMsg] = useState('')
+  const [closeBusy, setCloseBusy] = useState(false)
+  const [eodNotReady, setEodNotReady] = useState(false) // migration 026 not run yet
+  const autoClosedRef = useRef(false)
   // Calendar month shown in the Past days card (0 = January). Starts on
   // the current month; picking a day anywhere moves it to that day's
   // month so the calendar and the sheet stay in sync.
@@ -109,6 +123,44 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
       .catch((err) => { if (alive) { setPayError(err.message || 'Could not load payments.'); setPayLoading(false) } })
     return () => { alive = false }
   }, [])
+
+  // Once per mount: close out any past day left open — that is the
+  // "end of the day comes" part: a day closes itself the next time the
+  // tab is opened on a later day. Then load the close records so Past
+  // days can mark closed days. Best-effort: pre-migration (026 not run
+  // yet) both calls just return nothing, and the tab works as before.
+  useEffect(() => {
+    if (autoClosedRef.current) return undefined
+    autoClosedRef.current = true
+    let alive = true
+    store.listEndOfDayCloses().catch(() => []).then((rows) => { if (alive) setCloses(rows || []) })
+    if (date === today) {
+      store.autoClosePastDays(today).catch(() => []).then((closed) => {
+        if (alive && closed && closed.length) {
+          store.listEndOfDayCloses().catch(() => []).then((rows) => { if (alive) setCloses(rows || []) })
+        }
+      })
+    }
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // This date's added invoices + close record. Switching dates loads
+  // THAT date's list — the list is per-day in the DB now (Nov 27), so
+  // it sticks all day and survives refreshes; changing the date no
+  // longer wipes it.
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      store.listEndOfDayAdded(date).catch(() => []),
+      store.getEndOfDayClose(date).catch(() => null),
+    ]).then(([ids, close]) => {
+      if (!alive) return
+      setAddedIds(ids || [])
+      setCloseRec(close || null)
+    })
+    return () => { alive = false }
+  }, [date])
 
   const invoiceById = useMemo(() => new Map((data.invoices || []).map((i) => [i.id, i])), [data.invoices])
   const linesByInvoice = useMemo(() => {
@@ -162,6 +214,7 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
     [payments, data.invoices, linesByInvoice, data.settings, costOverrides])
 
   const activeDates = useMemo(() => new Set(history.map((d) => d.date)), [history])
+  const closedDates = useMemo(() => new Set((closes || []).map((c) => c.day)), [closes])
   const calWeeks = useMemo(() => calendarCells(calYear, calMonth, activeDates, today), [calYear, calMonth, activeDates, today])
   const monthLabel = new Date(calYear, calMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
@@ -180,21 +233,94 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
     setDate(d)
     setCalYear(Number(String(d).slice(0, 4)))
     setCalMonth(Number(String(d).slice(5, 7)) - 1)
+    // Cleared here only so the old date's invoices never flash on the
+    // new date — the date effect above loads the new date's own list.
     setAddedIds([])
+    setCloseRec(null)
+    setCloseMsg('')
     setAddMsg('')
   }
 
-  function addInvoice() {
+  async function addInvoice() {
     const found = findInvoiceByNumber(data.invoices || [], addText)
     if (!found) { setAddMsg(`No invoice matches "${addText.trim()}".`); return }
     if (rows.some((r) => r.inv.id === found.id)) { setAddMsg(`${found.number} is already on this sheet.`); return }
-    setAddedIds((ids) => [...ids, found.id])
-    setAddText('')
-    setAddMsg('')
+    try {
+      await store.addEndOfDayInvoice(date, found.id, userId)
+      setAddedIds((ids) => (ids.includes(found.id) ? ids : [...ids, found.id]))
+      // Adding to a closed day reopens it — the store deleted the close
+      // record, so the sheet reflects that here too.
+      if (closeRec) {
+        setCloseRec(null)
+        setCloses((c) => c.filter((x) => x.day !== date))
+      }
+      setAddText('')
+      setAddMsg('')
+    } catch (err) {
+      if (err?.notReady) {
+        // Pre-migration (026 not run yet): keep today's in-memory
+        // behavior — the invoice shows on the sheet now, it just won't
+        // stay after a refresh.
+        setEodNotReady(true)
+        setAddedIds((ids) => (ids.includes(found.id) ? ids : [...ids, found.id]))
+        setAddText('')
+        setAddMsg('')
+        return
+      }
+      setAddMsg(err?.message || 'Could not add that invoice.')
+    }
   }
 
-  function removeAdded(id) {
+  async function removeAdded(id) {
     setAddedIds((ids) => ids.filter((x) => x !== id))
+    try {
+      await store.removeEndOfDayInvoice(date, id)
+    } catch (err) {
+      if (err?.notReady) { setEodNotReady(true); return }
+      // A real failure: put it back so the sheet doesn't lie.
+      setAddedIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+      setAddMsg(err?.message || 'Could not remove that invoice.')
+    }
+  }
+
+  async function closeDay() {
+    if (!window.confirm('Close out this day? The invoices you added come off the sheet. The payments and costs stay saved.')) return
+    setCloseBusy(true)
+    setCloseMsg('')
+    try {
+      const rec = await store.closeEndOfDay(date, userId)
+      setAddedIds([])
+      setCloseRec(rec)
+      setCloses((c) => [...c.filter((x) => x.day !== date), rec])
+    } catch (err) {
+      if (err?.notReady) {
+        setEodNotReady(true)
+        setCloseMsg("Closing the day isn't ready yet — the update is still deploying.")
+      } else {
+        setCloseMsg(err?.message || 'Could not close the day.')
+      }
+    } finally {
+      setCloseBusy(false)
+    }
+  }
+
+  async function reopenDay() {
+    setCloseBusy(true)
+    setCloseMsg('')
+    try {
+      await store.reopenEndOfDay(date)
+      setCloseRec(null)
+      setCloses((c) => c.filter((x) => x.day !== date))
+    } catch (err) {
+      if (err?.notReady) {
+        setEodNotReady(true)
+        setCloseMsg("Reopening the day isn't ready yet — the update is still deploying.")
+      } else {
+        setCloseMsg(err?.message || 'Could not reopen the day.')
+      }
+    } finally {
+      setCloseBusy(false)
+    }
   }
 
   async function saveCost(invoiceId, cost) {
@@ -222,8 +348,18 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
 
   return (
     <>
-    <CollapsibleCard id="endofday-collected" userId={userId} title={<>End of day — {fmtDate(date)}</>} label="Collected today" headerExtra={<input type="date" value={date} onChange={(e) => changeDate(e.target.value)} aria-label="End of day date" />}>
+    <CollapsibleCard id="endofday-collected" userId={userId} title={<>End of day — {fmtDate(date)}</>} label="Collected today" headerExtra={(
+      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="date" value={date} onChange={(e) => changeDate(e.target.value)} aria-label="End of day date" />
+        <button type="button" className="btn secondary small" disabled={closeBusy} onClick={closeRec ? reopenDay : closeDay}>
+          {closeRec ? 'Reopen day' : 'Close day'}
+        </button>
+      </span>
+    )}>
       <p className="muted small">One row per invoice with money collected on this date. Sale, Labor, Tax and the rep fill in from the invoice — type in the Cost of the goods and Profit $ and % work themselves out. Cost is saved per invoice and never shows on the invoice itself.</p>
+      {closeRec && <p className="muted small">{closeLine(closeRec, data.profiles)}</p>}
+      {closeMsg && <p className="muted small">{closeMsg}</p>}
+      {eodNotReady && <p className="muted small">Added invoices aren&apos;t saving to the day yet — the update is still deploying, so they&apos;ll come off the sheet if you refresh.</p>}
       {payError && <div className="error">{payError}</div>}
       {isAdmin && (
         <div className="stat-strip">
@@ -358,6 +494,7 @@ export default function EndOfDay({ data, today, isAdmin, userId, onReload, onOpe
                 <tr key={d.date}>
                   <td className="nowrap">
                     <button type="button" onClick={() => changeDate(d.date)} style={{ ...linkStyle, fontWeight: d.date === date ? 700 : 400 }}>{fmtDate(d.date)}</button>
+                    {closedDates.has(d.date) && <span className="pill" style={{ marginLeft: 6 }}>Closed</span>}
                   </td>
                   <td className="num">{d.collectedCount} invoice{d.collectedCount === 1 ? '' : 's'}</td>
                   <td className="num">{d.billedCount} invoice{d.billedCount === 1 ? '' : 's'}</td>

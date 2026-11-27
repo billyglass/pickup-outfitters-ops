@@ -1,4 +1,4 @@
-import { computeTotals, roundCents, TAX_RATE_DEFAULT } from './tickets.js'
+import { computeTotals, roundCents, TAX_RATE_DEFAULT, fmtDate, chatTime } from './tickets.js'
 
 // End-of-day sheet (Nov 25, 2026) — pure helpers. Mirrors Bill's
 // spreadsheet exactly: Profit = Sale − Cost, % = Profit / Sale; Labor and
@@ -193,4 +193,32 @@ export function dayHistory(payments, invoices, linesByInvoice, taxRate, costOf) 
     })
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 60)
+}
+
+// Added-invoice days still open (Nov 27): a day counts as open when it
+// has added invoices and no close record, and it is in the past — today
+// is never auto-closed (it closes when the day ends, i.e. the next time
+// the tab loads on a later day). Oldest first, duplicates removed.
+export function unclosedAddedDays(addedDays, closeDays, today) {
+  const closed = new Set(closeDays || [])
+  return [...new Set(addedDays || [])]
+    .filter((d) => d && d < today && !closed.has(d))
+    .sort()
+}
+
+// One line for a closed day, e.g. "Closed by Jeff · 11/27/2026 5:42 PM"
+// or "Closed automatically at end of day" when closed_by is null (the
+// day closed itself). Returns '' when there is no close record. Date
+// and time are both taken from the local zone so they agree with each
+// other (a UTC date slice would not).
+export function closeLine(close, profiles) {
+  if (!close) return ''
+  if (!close.closed_by) return 'Closed automatically at end of day'
+  const name = (profiles || []).find((p) => p.id === close.closed_by)?.name || 'Unknown'
+  if (!close.closed_at) return `Closed by ${name}`
+  const d = new Date(close.closed_at)
+  if (Number.isNaN(d.getTime())) return `Closed by ${name}`
+  const pad = (n) => String(n).padStart(2, '0')
+  const localDay = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return `Closed by ${name} · ${fmtDate(localDay)} ${chatTime(close.closed_at)}`.trim()
 }
