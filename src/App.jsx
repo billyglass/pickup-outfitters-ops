@@ -70,9 +70,12 @@ export default function App() {
   const [customersView, setCustomersView] = useState('companies') // 'companies' | 'people'
   const [peopleFilter, setPeopleFilter] = useState('')
   // Alphabetical sort (Nov 27): both views sort A–Z by default; clicking
-  // the Company / Name header flips to Z–A.
+  // the Company / Name header flips to Z–A. The People view can also
+  // sort by Company — clicking a different header sorts that column
+  // A–Z first, clicking the same header flips its direction.
   const [companySortDir, setCompanySortDir] = useState('asc') // 'asc' | 'desc'
   const [peopleSortDir, setPeopleSortDir] = useState('asc') // 'asc' | 'desc'
+  const [peopleSortKey, setPeopleSortKey] = useState('name') // 'name' | 'company'
   // Contact to spotlight in the profile's Contacts list — set only when
   // opening a company from the People view, so Bill lands on the right
   // person. Cleared by openCustomerProfile whenever a profile is opened
@@ -424,7 +427,7 @@ export default function App() {
   // says how many of each exist in the current Retail/Fleet scope.
   const companiesTypeFiltered = data.customers.filter((c) => !customerTypeFilter || customerTypeOf(c) === customerTypeFilter)
   const peopleTypeFiltered = peopleRows(data.customers, data.contacts).filter((r) => !customerTypeFilter || customerTypeOf(r.company) === customerTypeFilter)
-  const people = sortPeopleAlpha(peopleTypeFiltered.filter((r) => !peopleFilter.trim() || peopleMatchesFilter(r, peopleFilter)), peopleSortDir)
+  const people = sortPeopleAlpha(peopleTypeFiltered.filter((r) => !peopleFilter.trim() || peopleMatchesFilter(r, peopleFilter)), peopleSortDir, peopleSortKey)
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
     if (!q) return true
@@ -910,7 +913,7 @@ export default function App() {
                   <>
                     <input value={peopleFilter} onChange={(e) => setPeopleFilter(e.target.value)} placeholder="Filter by name, title, company, phone, or email…" style={{ marginTop: 12 }} />
                     <table>
-                      <thead><tr><th onClick={() => setPeopleSortDir(peopleSortDir === 'asc' ? 'desc' : 'asc')} style={{ cursor: 'pointer' }} title="Sort alphabetically">Name {peopleSortDir === 'asc' ? '▲' : '▼'}</th><th>Title</th><th>Company</th><th>Phone</th><th>Email</th><th></th></tr></thead>
+                      <thead><tr><th onClick={() => { if (peopleSortKey === 'name') setPeopleSortDir(peopleSortDir === 'asc' ? 'desc' : 'asc'); else { setPeopleSortKey('name'); setPeopleSortDir('asc') } }} style={{ cursor: 'pointer' }} title="Sort alphabetically">Name {peopleSortKey === 'name' ? (peopleSortDir === 'asc' ? '▲' : '▼') : ''}</th><th>Title</th><th onClick={() => { if (peopleSortKey === 'company') setPeopleSortDir(peopleSortDir === 'asc' ? 'desc' : 'asc'); else { setPeopleSortKey('company'); setPeopleSortDir('asc') } }} style={{ cursor: 'pointer' }} title="Sort alphabetically">Company {peopleSortKey === 'company' ? (peopleSortDir === 'asc' ? '▲' : '▼') : ''}</th><th>Phone</th><th>Email</th><th></th></tr></thead>
                       <tbody>
                         {people.map((r) => (
                           <tr key={r.contact.id}>

@@ -74,9 +74,11 @@ export function sortCompaniesAlpha(companies, dir = 'asc') {
   return dir === 'desc' ? sorted.reverse() : sorted
 }
 
-export function sortPeopleAlpha(rows, dir = 'asc') {
+export function sortPeopleAlpha(rows, dir = 'asc', key = 'name') {
   const sorted = [...(rows || [])].sort((a, b) =>
-    alphaCompare(a.contact?.name, b.contact?.name) || alphaCompare(a.company?.company, b.company?.company))
+    key === 'company'
+      ? alphaCompare(a.company?.company, b.company?.company) || alphaCompare(a.contact?.name, b.contact?.name)
+      : alphaCompare(a.contact?.name, b.contact?.name) || alphaCompare(a.company?.company, b.company?.company))
   return dir === 'desc' ? sorted.reverse() : sorted
 }
 
