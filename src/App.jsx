@@ -5,6 +5,7 @@ import { store, globalSearch } from './lib/store.js'
 import { customerTypeOf, ticketCustomerName, fmtDate, invoiceFromProduct, salespersonNamesOf, hasNewChatMessages, money, displayInvoiceStatus, canCompleteAndBill, invoiceBillingDates } from './lib/tickets.js'
 import { normalizeVin } from './lib/csv.js'
 import { formatPhone } from './lib/phones.js'
+import { peopleRows, peopleMatchesFilter, companyMatchesFilter, primaryContact, openInvoicesSummary, readCustomersViewMap, writeCustomersViewMap, getCustomersView, withCustomersView } from './lib/crm.js'
 import Login, { SetPassword } from './components/Login.jsx'
 import CustomerForm from './components/CustomerForm.jsx'
 import CustomerNotes from './components/CustomerNotes.jsx'
@@ -63,6 +64,16 @@ export default function App() {
   const [error, setError] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
   const [customerTypeFilter, setCustomerTypeFilter] = useState('') // '' = All, 'Retail', 'Fleet'
+  // Customers page CRM (Nov 27): Companies | People view, remembered per
+  // user. peopleFilter is the People search box (separate from the
+  // Companies filter, so switching views keeps each filter).
+  const [customersView, setCustomersView] = useState('companies') // 'companies' | 'people'
+  const [peopleFilter, setPeopleFilter] = useState('')
+  // Contact to spotlight in the profile's Contacts list — set only when
+  // opening a company from the People view, so Bill lands on the right
+  // person. Cleared by openCustomerProfile whenever a profile is opened
+  // without a contact.
+  const [highlightContactId, setHighlightContactId] = useState(null)
   const [vehicleFilter, setVehicleFilter] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   // Customer profile: each history section (Invoices / Vehicles / Quotes)
@@ -220,6 +231,18 @@ export default function App() {
     setShowAllProfileQuotes(false)
   }, [selectedCustomerId])
 
+  // Customers page view (Companies | People) is remembered per user, so
+  // someone who always works in People view stays there. Same per-user
+  // localStorage map shape as the collapse state (see crm.js).
+  useEffect(() => {
+    setCustomersView(getCustomersView(readCustomersViewMap(), user?.id))
+  }, [user?.id])
+
+  function changeCustomersView(view) {
+    setCustomersView(view)
+    writeCustomersViewMap(withCustomersView(readCustomersViewMap(), user?.id, view))
+  }
+
   function onAuthed(u, p) {
     setUser(u)
     setProfile(p)
@@ -339,7 +362,7 @@ export default function App() {
     try {
       await store.deleteCustomer(id)
       setEditingCustomer(undefined)
-      setSelectedCustomerId(null)
+      openCustomerProfile(null)
       await loadData()
     } catch (err) {
       setError(err.message || 'Delete failed.')
@@ -383,11 +406,21 @@ export default function App() {
     )
   }
 
+  // Contacts grouped by company, for the Companies filter and the
+  // Primary contact column.
+  const contactsByCustomer = {}
+  for (const ct of data.contacts) { (contactsByCustomer[ct.customer_id] ||= []).push(ct) }
   const customers = data.customers.filter((c) =>
     (!customerTypeFilter || customerTypeOf(c) === customerTypeFilter) &&
-    (!customerFilter.trim() ||
-    c.company.toLowerCase().includes(customerFilter.toLowerCase()))
+    (!customerFilter.trim() || companyMatchesFilter(c, contactsByCustomer[c.id] || [], customerFilter))
   )
+  // People view: one row per contact, A–Z. The type filter applies by
+  // the person's company; the text filter is the People search box.
+  // Toggle counts are type-filtered only (no text filter), so the toggle
+  // says how many of each exist in the current Retail/Fleet scope.
+  const companiesTypeFiltered = data.customers.filter((c) => !customerTypeFilter || customerTypeOf(c) === customerTypeFilter)
+  const peopleTypeFiltered = peopleRows(data.customers, data.contacts).filter((r) => !customerTypeFilter || customerTypeOf(r.company) === customerTypeFilter)
+  const people = peopleTypeFiltered.filter((r) => !peopleFilter.trim() || peopleMatchesFilter(r, peopleFilter))
   const vehicles = data.vehicles.filter((v) => {
     const q = vehicleFilter.trim().toLowerCase()
     if (!q) return true
@@ -403,6 +436,14 @@ export default function App() {
   const profileQuotes = selectedCustomer ? data.quotes.filter((q) => q.customer_id === selectedCustomer.id).sort(byNewestTicket) : []
   const profileVehicles = selectedCustomer ? data.vehicles.filter((v) => v.customer_id === selectedCustomer.id).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) : []
   const customerName = (id) => id ? data.customers.find((c) => c.id === id)?.company || '—' : 'Walk-in'
+  // Open a company profile, optionally spotlighting one contact in the
+  // profile's Contacts list (used when opening from the People view, so
+  // Bill lands on the right person). Every other open path passes no
+  // contact, which clears any stale highlight.
+  function openCustomerProfile(customerId, contactId = null) {
+    setSelectedCustomerId(customerId)
+    setHighlightContactId(contactId)
+  }
   // Dashboard (the sales home page): today's tickets, and the open quotes
   // to chase. Dates use the shop's local day, not UTC — an evening ticket
   // still counts as today.
@@ -594,9 +635,9 @@ export default function App() {
               ))}
               {chaseQuotes.length > 8 && <p className="muted small">{chaseQuotes.length - 8} more open — see All quotes.</p>}
             </CollapsibleCard>
-            <SalesDashboard data={data} today={todayStr} userId={user?.id} onOpenTicket={openTicket} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
+            <SalesDashboard data={data} today={todayStr} userId={user?.id} onOpenTicket={openTicket} onOpenCustomer={(id) => { openCustomerProfile(id); setTab('customers') }} onOpenProducts={() => setTab('products')} />
             {isAdmin && (
-              <AdminMetrics data={data} today={todayStr} userId={user?.id} onOpenCustomer={(id) => { setSelectedCustomerId(id); setTab('customers') }} />
+              <AdminMetrics data={data} today={todayStr} userId={user?.id} onOpenCustomer={(id) => { openCustomerProfile(id); setTab('customers') }} />
             )}
           </div>
         )}
@@ -674,7 +715,7 @@ export default function App() {
                   <div className="result-title"><strong>{c.company}</strong> <span className="pill">{customerTypeOf(c)}</span></div>
                   <div className="result-meta">{c.payment_terms}{c.tax_exempt ? ' · Tax exempt' : ''}</div>
                 </div>
-                <button className="btn secondary" onClick={() => { setSelectedCustomerId(c.id); setTab('customers') }}>Open</button>
+                <button className="btn secondary" onClick={() => { openCustomerProfile(c.id); setTab('customers') }}>Open</button>
               </div>
             ))}
           </div>
@@ -704,7 +745,7 @@ export default function App() {
                 contacts={editingCustomer ? data.contacts.filter((c) => c.customer_id === editingCustomer.id) : []}
                 addresses={editingCustomer ? data.addresses.filter((a) => a.customer_id === editingCustomer.id) : []}
                 isAdmin={isAdmin}
-                onSaved={async (saved) => { setEditingCustomer(undefined); setSelectedCustomerId(saved.id); await loadData() }}
+                onSaved={async (saved) => { setEditingCustomer(undefined); openCustomerProfile(saved.id); await loadData() }}
                 onCancel={() => setEditingCustomer(undefined)}
                 onDelete={isAdmin && editingCustomer?.id ? () => handleDeleteCustomer(editingCustomer.id, editingCustomer.company) : undefined}
               />
@@ -717,7 +758,7 @@ export default function App() {
                 <div className="ticket-section profile-header">
                   <div className="row-between">
                     <h2 style={{ margin: 0, fontSize: 20 }}>{selectedCustomer.company} <span className="pill">{customerTypeOf(selectedCustomer)}</span></h2>
-                    <button className="btn secondary" onClick={() => setSelectedCustomerId(null)}>← All customers</button>
+                    <button className="btn secondary" onClick={() => openCustomerProfile(null)}>← All customers</button>
                   </div>
                   <p className="muted" style={{ marginBottom: 4 }}>
                     Terms: {selectedCustomer.payment_terms} · {selectedCustomer.tax_exempt ? 'Tax exempt' : 'Taxable'}
@@ -728,7 +769,7 @@ export default function App() {
                     <div>
                       <h3>Contacts</h3>
                       {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).map((c) => (
-                        <div key={c.id}>{c.name} {c.title ? `(${c.title})` : ''} · {formatPhone(c.phone) || '—'} · {c.email || '—'}</div>
+                        <div key={c.id} style={c.id === highlightContactId ? { background: '#fdf0d5', padding: '2px 6px', borderRadius: 4 } : undefined}>{c.name} {c.title ? `(${c.title})` : ''} · {formatPhone(c.phone) || '—'} · {c.email || '—'}</div>
                       ))}
                       {data.contacts.filter((c) => c.customer_id === selectedCustomer.id).length === 0 && <p className="muted">No contacts yet.</p>}
                     </div>
@@ -825,29 +866,63 @@ export default function App() {
               </div>
               </>
             ) : (
-              <CollapsibleCard id="customers-list" userId={user?.id} title={<>Customers ({customers.length})</>} label="Customers list" headerExtra={<button className="btn" onClick={() => setEditingCustomer(null)}>+ New customer</button>}>
-                <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter by company name…" style={{ marginTop: 12 }} />
+              <CollapsibleCard id="customers-list" userId={user?.id} title={customersView === 'people' ? `People (${people.length})` : `Companies (${customers.length})`} label="Customers list" headerExtra={<button className="btn" onClick={() => setEditingCustomer(null)}>+ New customer</button>}>
+                <div className="row" style={{ marginTop: 12 }} role="group" aria-label="Customers view">
+                  <button type="button" className={customersView === 'companies' ? 'btn' : 'btn secondary'} onClick={() => changeCustomersView('companies')}>Companies ({companiesTypeFiltered.length})</button>
+                  <button type="button" className={customersView === 'people' ? 'btn' : 'btn secondary'} onClick={() => changeCustomersView('people')}>People ({peopleTypeFiltered.length})</button>
+                </div>
                 <div className="row" style={{ marginTop: 12 }} role="group" aria-label="Customer type filter">
                   <button type="button" className={customerTypeFilter === '' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('')}>All ({data.customers.length})</button>
                   <button type="button" className={customerTypeFilter === 'Retail' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('Retail')}>Retail ({data.customers.filter((c) => customerTypeOf(c) === 'Retail').length})</button>
                   <button type="button" className={customerTypeFilter === 'Fleet' ? 'btn' : 'btn secondary'} onClick={() => setCustomerTypeFilter('Fleet')}>Fleet ({data.customers.filter((c) => customerTypeOf(c) === 'Fleet').length})</button>
                 </div>
-                <table>
-                  <thead><tr><th>Company</th><th>Type</th><th>Terms</th><th>Tax</th><th>Vehicles</th><th></th></tr></thead>
-                  <tbody>
-                    {customers.map((c) => (
-                      <tr key={c.id}>
-                        <td><strong>{c.company}</strong>{c.flag ? <span className="flag-pill" style={{ marginLeft: 6 }}>{c.flag}</span> : ''}</td>
-                        <td><span className="pill">{customerTypeOf(c)}</span></td>
-                        <td>{c.payment_terms}</td>
-                        <td>{c.tax_exempt ? 'Exempt' : 'Taxable'}</td>
-                        <td>{data.vehicles.filter((v) => v.customer_id === c.id).length}</td>
-                        <td><button className="btn secondary" onClick={() => setSelectedCustomerId(c.id)}>Open</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {customers.length === 0 && <p className="muted">No customers yet. Start fresh, or import from QuickBooks (Admin → Import tab).</p>}
+                {customersView === 'companies' ? (
+                  <>
+                    <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="Filter by company, contact, or phone…" style={{ marginTop: 12 }} />
+                    <table>
+                      <thead><tr><th>Company</th><th>Type</th><th>Terms</th><th>Tax</th><th>Primary contact</th><th>Vehicles</th><th>Open invoices</th><th></th></tr></thead>
+                      <tbody>
+                        {customers.map((c) => {
+                          const pc = primaryContact(contactsByCustomer[c.id] || [])
+                          const open = openInvoicesSummary(data.invoices, c.id)
+                          return (
+                            <tr key={c.id}>
+                              <td><strong>{c.company}</strong>{c.flag ? <span className="flag-pill" style={{ marginLeft: 6 }}>{c.flag}</span> : ''}</td>
+                              <td><span className="pill">{customerTypeOf(c)}</span></td>
+                              <td>{c.payment_terms}</td>
+                              <td>{c.tax_exempt ? 'Exempt' : 'Taxable'}</td>
+                              <td>{pc ? <>{pc.name}{pc.phone ? ` · ${formatPhone(pc.phone)}` : ''}</> : '—'}</td>
+                              <td>{data.vehicles.filter((v) => v.customer_id === c.id).length}</td>
+                              <td>{open.count > 0 ? <>{open.count}{isAdmin ? ` · ${money(open.balance)}` : ''}</> : '—'}</td>
+                              <td><button className="btn secondary" onClick={() => openCustomerProfile(c.id)}>Open</button></td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {customers.length === 0 && <p className="muted">No customers yet. Start fresh, or import from QuickBooks (Admin → Import tab).</p>}
+                  </>
+                ) : (
+                  <>
+                    <input value={peopleFilter} onChange={(e) => setPeopleFilter(e.target.value)} placeholder="Filter by name, title, company, phone, or email…" style={{ marginTop: 12 }} />
+                    <table>
+                      <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Phone</th><th>Email</th><th></th></tr></thead>
+                      <tbody>
+                        {people.map((r) => (
+                          <tr key={r.contact.id}>
+                            <td><strong>{r.contact.name}</strong>{r.contact.is_primary ? <span className="pill" style={{ marginLeft: 6 }}>Primary</span> : ''}</td>
+                            <td>{r.contact.title || '—'}</td>
+                            <td><button type="button" onClick={() => openCustomerProfile(r.company.id, r.contact.id)} style={{ background: 'none', border: 0, padding: 0, color: 'var(--orange-dark)', textDecoration: 'underline', font: 'inherit', cursor: 'pointer' }}>{r.company.company}</button></td>
+                            <td>{formatPhone(r.contact.phone) || '—'}</td>
+                            <td>{r.contact.email || '—'}</td>
+                            <td><button className="btn secondary" onClick={() => openCustomerProfile(r.company.id, r.contact.id)}>Open</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {people.length === 0 && <p className="muted">No people match.</p>}
+                  </>
+                )}
               </CollapsibleCard>
             )}
           </>
